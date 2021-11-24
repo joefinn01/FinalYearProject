@@ -1,12 +1,16 @@
 #pragma once
 
+#include <Windows.h>
+
 class MathHelper
 {
 public:
-	static int Calculate32AlignedBufferSize(size_t size);
-	static int Calculate64AlignedBufferSize(size_t size);
+	static UINT Calculate32AlignedBufferSize(UINT size);
+	static UINT Calculate64AlignedBufferSize(UINT size);
 
-	static int CalculatePaddedConstantBufferSize(size_t size);
+	static UINT CalculateAlignedSize(UINT uiSize, UINT uiAlignment);
+
+	static UINT CalculatePaddedConstantBufferSize(UINT size);
 protected:
 
 private:

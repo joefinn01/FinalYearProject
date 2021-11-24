@@ -1,27 +1,21 @@
 #include "MathHelper.h"
 
-int MathHelper::Calculate32AlignedBufferSize(size_t size)
+UINT MathHelper::Calculate32AlignedBufferSize(UINT size)
 {
-	return (size + 32) & ~32;
+	return CalculateAlignedSize(size, 32);
 }
 
-int MathHelper::Calculate64AlignedBufferSize(size_t size)
+UINT MathHelper::Calculate64AlignedBufferSize(UINT size)
 {
-	int iRemainder = size % 64;
-
-	if (iRemainder != 0)
-	{
-		return size + (64 - iRemainder);
-	}
-	else
-	{
-		return size;
-	}
-
-
+	return CalculateAlignedSize(size, 64);
 }
 
-int MathHelper::CalculatePaddedConstantBufferSize(size_t size)
+UINT MathHelper::CalculateAlignedSize(UINT uiSize, UINT uiAlignment)
 {
-	return (size + 255) & ~255;
+	return (uiSize + (uiAlignment - 1)) & ~(uiAlignment - 1);
+}
+
+UINT MathHelper::CalculatePaddedConstantBufferSize(UINT size)
+{
+	return CalculateAlignedSize(size, 256);
 }
