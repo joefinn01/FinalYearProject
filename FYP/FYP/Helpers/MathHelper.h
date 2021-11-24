@@ -2,6 +2,8 @@
 
 #include <Windows.h>
 
+#include <DirectXMath.h>
+
 class MathHelper
 {
 public:
@@ -11,6 +13,8 @@ public:
 	static UINT CalculateAlignedSize(UINT uiSize, UINT uiAlignment);
 
 	static UINT CalculatePaddedConstantBufferSize(UINT size);
+
+	static DirectX::XMFLOAT4X4 Identity();
 protected:
 
 private:
