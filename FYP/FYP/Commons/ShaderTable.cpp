@@ -8,7 +8,7 @@ Tag tag = L"ShaderTable";
 
 ShaderTable::ShaderTable(ID3D12Device* pDevice, UINT uiNumRecords, UINT uiRecordSize)
 {
-	m_uiRecordsSize = MathHelper::CalculateAlignedSize(uiRecordSize, SHADER_RECORD_BYTE_ALIGNMENT);
+	m_uiRecordsSize = MathHelper::CalculateAlignedSize(uiRecordSize, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
 	m_Records.reserve(uiNumRecords);
 
 	HRESULT hr = pDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
