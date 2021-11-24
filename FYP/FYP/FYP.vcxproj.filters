@@ -76,6 +76,9 @@
     <ClCompile Include="Helpers\DXRHelper.cpp">
       <Filter>Helpers</Filter>
     </ClCompile>
+    <ClCompile Include="Commons\ShaderTable.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -152,6 +155,15 @@
     </ClInclude>
     <ClInclude Include="Commons\UploadBuffer.h">
       <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\ShaderRecord.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\ShaderTable.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\DirectX\d3dx12.h">
+      <Filter>Include\DirectX</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
