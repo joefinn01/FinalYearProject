@@ -1,13 +1,12 @@
 #pragma once
 
-#include <d3d12.h>
+#include <Include/DirectX/d3dx12.h>
 #include <wrl.h>
 #include <dxgi1_4.h>
 
 #include "Commons/Singleton.h"
 #include "Commons/Timer.h"
 #include "Commons/UploadBuffer.h"
-#include "Include/nv_helpers_dx12/ShaderBindingTableGenerator.h"
 
 #include <unordered_map>
 #include <dxcapi.h>
@@ -16,14 +15,43 @@
 class Timer;
 
 struct RayGenerationCB;
+struct Vertex;
 
-struct ShaderInfo
+struct FrameResources
 {
-	Microsoft::WRL::ComPtr<IDxcBlob> m_pBlob;
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
+
+
+	UINT64 m_uiFenceValue = 0;
 };
 
-struct Vertex;
+enum class SrvUavHeapIndex
+{
+	OUTPUT = 0,
+	ACCELERATION_STRUCTURE,
+	CONSTANT_BUFFER,
+	COUNT
+};
+
+namespace GlobalRootSignatureParams
+{
+	enum Value
+	{
+		OUTPUT = 0,
+		ACCELERATION_STRUCTURE,
+		SCENE_CB,
+		COUNT
+	};
+}
+
+namespace LocalRootSignatureParams {
+	enum Value 
+	{
+		CUBE_CONSTANTS = 0,
+		COUNT
+	};
+}
 
 class App
 {
@@ -63,7 +91,10 @@ protected:
 	void FlushCommandQueue();
 	
 	bool CreateDescriptorHeaps();
-	void CreateStateObject();
+	
+	bool CreateStateObject();
+
+	bool CompileShaders();
 
 	void CreateGeometry();
 
@@ -75,9 +106,7 @@ protected:
 
 	void CreateCBUploadBuffers();
 
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> CreateRayGenSignature();
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> CreateHitSignature();
-	Microsoft::WRL::ComPtr<ID3D12RootSignature> CreateMissSignature();
+	bool CreateGlobalSignature();
 
 	void PopulateDescriptorHeaps();
 
@@ -89,8 +118,26 @@ protected:
 
 	void ExecuteCommandList();
 
-	ID3D12Resource* GetCurrentBackBuffer() const;
-	D3D12_CPU_DESCRIPTOR_HANDLE GetCurrentBackBufferView() const;
+	D3D12_CPU_DESCRIPTOR_HANDLE GetSrvUavDescriptorHandleCPU(UINT index);
+	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvUavDescriptorHandleGPU(UINT index);
+
+	ID3D12Resource* GetBackBuffer() const;
+	ID3D12Resource* GetBackBuffer(int iIndex) const;
+	Microsoft::WRL::ComPtr<ID3D12Resource>* GetBackBufferComptr();
+	Microsoft::WRL::ComPtr<ID3D12Resource>* GetBackBufferComptr(int iIndex);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferView() const;
+	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferView(int iIndex) const;
+
+	ID3D12CommandAllocator* GetCommandAllocator() const;
+	ID3D12CommandAllocator* GetCommandAllocator(int iIndex) const;
+	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr();
+	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr(int iIndex);
+
+	UINT64 GetFenceValue();
+	UINT64 GetFenceValue(int iIndex);
+
+	void IncrementFenceValue();
 
 	static App* m_pApp;
 
@@ -111,6 +158,8 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pBottomLevelAccelerationStructure;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pTopLevelAccelerationStructure;
 
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRaytracingOutput;
 
 	Microsoft::WRL::ComPtr<IDXGIFactory4> m_pDXGIFactory = nullptr;
@@ -119,17 +168,14 @@ protected:
 	Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain = nullptr;
 	static const UINT s_kuiSwapChainBufferCount = 2;
 
-	int m_iBackBufferIndex = 0;
+	UINT m_uiFrameIndex = 0;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pSwapChainBuffer[s_kuiSwapChainBufferCount];
 
 	Microsoft::WRL::ComPtr<ID3D12StateObject> m_pStateObject;
 	Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> m_pStateObjectProps;
 
-	std::unordered_map<std::wstring, ShaderInfo> m_Shaders;
+	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDxcBlob>> m_Shaders;
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_pSrvUavHeap = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_pRTVHeap = nullptr;
@@ -137,22 +183,26 @@ protected:
 	UINT m_uiRtvDescriptorSize;
 	UINT m_uiSrvUavDescriptorSize;
 
-	nv_helpers_dx12::ShaderBindingTableGenerator m_SBTHelper;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pSBTBuffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pHitGroupTable;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRayGenTable;
+
+	UINT m_uiMissRecordSize;
+	UINT m_uiHitGroupRecordSize;
+	UINT m_uiRayGenRecordSize;
 
 	UploadBuffer<Vertex>* m_pTriVertices = nullptr;
 	UploadBuffer<UINT16>* m_pTriIndices = nullptr;
 
 	UploadBuffer<RayGenerationCB>* m_pRayGenCB = nullptr;
 
-	const std::wstring m_kwsRayGenName = L"RayGen";
-	const std::wstring m_kwsClosestHitName = L"ClosestHit";
-	const std::wstring m_kwsMissGenName = L"Miss";
+	LPCWSTR m_kwsRayGenName = L"RayGen";
+	LPCWSTR m_kwsClosestHitName = L"ClosestHit";
+	LPCWSTR m_kwsMissName = L"Miss";
+	LPCWSTR m_kwsHitGroupName = L"HitGroup";
 
 	bool m_b4xMSAAState = false;
 	UINT m_uiMSAAQuality = 0;
-
-	UINT64 m_uiCurrentFence = 0;
 
 	DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
@@ -161,6 +211,6 @@ protected:
 #endif
 
 private:
-
+	FrameResources m_FrameResources[s_kuiSwapChainBufferCount];
 };
 
