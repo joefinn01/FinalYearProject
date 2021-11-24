@@ -126,9 +126,6 @@
     <ClInclude Include="Managers\WindowManager.h">
       <Filter>Managers</Filter>
     </ClInclude>
-    <ClInclude Include="Commons\Vertices.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
     <ClInclude Include="Helpers\MathHelper.h">
       <Filter>Helpers</Filter>
     </ClInclude>
@@ -166,6 +163,9 @@
       <Filter>Shaders</Filter>
     </ClInclude>
     <ClInclude Include="Shaders\HlslCompat.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="Shaders\Vertices.h">
       <Filter>Shaders</Filter>
     </ClInclude>
   </ItemGroup>
