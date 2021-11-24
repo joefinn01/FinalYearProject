@@ -1,3 +1,6 @@
+#define HLSL
+
+#include "ConstantBuffers.h"
 #include "Commons.hlsli"
 
 RaytracingAccelerationStructure Scene : register(t0, space0);
@@ -17,8 +20,6 @@ void RayGen()
                            lerp(gRayGenCB.View.Top, gRayGenCB.View.Bottom, lerpValues.y),
                            0.0f);
 
-    if ((origin.x >= gRayGenCB.View.Left && origin.x <= gRayGenCB.View.Right) && (origin.y >= gRayGenCB.View.Top && origin.y <= gRayGenCB.View.Bottom))
-    {
         // Trace the ray.
         // Set the ray's extents.
         RayDesc ray;
@@ -33,10 +34,4 @@ void RayGen()
 
         // Write the raytraced color to the output texture.
         RenderTarget[DispatchRaysIndex().xy] = payload.color;
-    }
-    else
-    {
-        // Render interpolated DispatchRaysIndex outside the stencil window
-        RenderTarget[DispatchRaysIndex().xy] = float4(lerpValues, 0, 1);
-    }
 }

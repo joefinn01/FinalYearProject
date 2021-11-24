@@ -201,7 +201,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h" />
-    <ClInclude Include="Commons\ConstantBuffers.h" />
     <ClInclude Include="Commons\ShaderRecord.h" />
     <ClInclude Include="Commons\ShaderTable.h" />
     <ClInclude Include="Commons\Singleton.h" />
@@ -253,6 +252,13 @@
     <ClInclude Include="Include\wsl\winadapter.h" />
     <ClInclude Include="Include\wsl\wrladapter.h" />
     <ClInclude Include="Managers\WindowManager.h" />
+    <ClInclude Include="Shaders\ConstantBuffers.h" />
+    <ClInclude Include="Shaders\HlslCompat.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DebugPix|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleasePix|x64'">true</ExcludedFromBuild>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

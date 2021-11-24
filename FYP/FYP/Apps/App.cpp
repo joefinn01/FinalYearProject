@@ -1,6 +1,6 @@
 #include "App.h"
 #include "Commons/Timer.h"
-#include "Commons/ConstantBuffers.h"
+#include "Shaders/ConstantBuffers.h"
 #include "Commons/Vertices.h"
 #include "Commons/ShaderTable.h"
 #include "Helpers/DebugHelper.h"

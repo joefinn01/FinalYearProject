@@ -129,9 +129,6 @@
     <ClInclude Include="Commons\Vertices.h">
       <Filter>Commons</Filter>
     </ClInclude>
-    <ClInclude Include="Commons\ConstantBuffers.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
     <ClInclude Include="Helpers\MathHelper.h">
       <Filter>Helpers</Filter>
     </ClInclude>
@@ -164,6 +161,12 @@
     </ClInclude>
     <ClInclude Include="Include\DirectX\d3dx12.h">
       <Filter>Include\DirectX</Filter>
+    </ClInclude>
+    <ClInclude Include="Shaders\ConstantBuffers.h">
+      <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="Shaders\HlslCompat.h">
+      <Filter>Shaders</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
