@@ -8,6 +8,7 @@
 #include "Helpers/DXRHelper.h"
 #include "Managers/WindowManager.h"
 #include "Managers/InputManager.h"
+#include "Managers/ObjectManager.h"
 
 #if PIX
 #include "pix3.h"
@@ -218,7 +219,7 @@ void App::Update(const Timer& kTimer)
 {
 	InputManager::GetInstance()->Update(kTimer);
 
-	m_pCamera->Update(kTimer);
+	ObjectManager::GetInstance()->GetActiveCamera()->Update(kTimer);
 
 	UpdatePerFrameCB(m_uiFrameIndex);
 }
@@ -1139,31 +1140,65 @@ bool App::CreateAccelerationStructures()
 
 bool App::CreateShaderTables()
 {
+	if (CreateRayGenShaderTable() == false)
+	{
+		return false;
+	}
+
+	if (CreateMissShaderTable() == false)
+	{
+		return false;
+	}
+
+	if (CreateHitGroupShaderTable() == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool App::CreateRayGenShaderTable()
+{
 	void* pRayGenIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsRayGenName);
+
+	ShaderTable shaderTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pRayGenIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	{
+		LOG_ERROR(tag, L"Failed to add a ray gen shader record!");
+
+		return false;
+	}
+
+	m_pRayGenTable = shaderTable.GetBuffer();
+	m_uiRayGenRecordSize = shaderTable.GetRecordSize();
+
+	return true;
+}
+
+bool App::CreateMissShaderTable()
+{
 	void* pMissIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsMissName);
+
+	ShaderTable shaderTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pMissIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	{
+		LOG_ERROR(tag, L"Failed to add a miss shader record!");
+
+		return false;
+	}
+
+	m_pMissTable = shaderTable.GetBuffer();
+	m_uiMissRecordSize = shaderTable.GetRecordSize();
+
+	return true;
+}
+
+bool App::CreateHitGroupShaderTable()
+{
 	void* pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupName);
-
-	//Create ray gen shader table
-	ShaderTable rayGenTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-	if (rayGenTable.AddRecord(ShaderRecord(nullptr, 0, pRayGenIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
-	{
-		return false;
-	}
-
-	m_pRayGenTable = rayGenTable.GetBuffer();
-	m_uiRayGenRecordSize = rayGenTable.GetRecordSize();
-
-	//Create miss shader table
-	ShaderTable missTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-	if (missTable.AddRecord(ShaderRecord(nullptr, 0, pMissIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
-	{
-		return false;
-	}
-
-	m_pMissTable = missTable.GetBuffer();
-	m_uiMissRecordSize = missTable.GetRecordSize();
 
 	struct HitGroupRootArgs
 	{
@@ -1173,11 +1208,12 @@ bool App::CreateShaderTables()
 	HitGroupRootArgs hitGroupRootArgs;
 	hitGroupRootArgs.cubeCB = m_CubeCB;
 
-	//Create hit group shader table
 	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
 
 	if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 	{
+		LOG_ERROR(tag, L"Failed to add a hit group shader record!");
+
 		return false;
 	}
 
@@ -1249,8 +1285,11 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	m_pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 1), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 1), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
 
+	ObjectManager::GetInstance()->AddCamera(pCamera);
+
+	ObjectManager::GetInstance()->SetActiveCamera(pCamera->GetName());
 }
 
 void App::InitScene()
@@ -1276,8 +1315,10 @@ void App::InitConstantBuffers()
 
 void App::UpdatePerFrameCB(UINT uiFrameIndex)
 {
-	m_PerFrameCBs[uiFrameIndex].EyePosW = XMLoadFloat3(&m_pCamera->GetPosition());
-	m_PerFrameCBs[uiFrameIndex].InvWorldProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, XMLoadFloat4x4(&m_pCamera->GetViewProjectionMatrix())));
+	Camera* pCamera = ObjectManager::GetInstance()->GetActiveCamera();
+
+	m_PerFrameCBs[uiFrameIndex].EyePosW = XMLoadFloat3(&pCamera->GetPosition());
+	m_PerFrameCBs[uiFrameIndex].InvWorldProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, XMLoadFloat4x4(&pCamera->GetViewProjectionMatrix())));
 
 	m_pPerFrameCBUpload->CopyData(uiFrameIndex, m_PerFrameCBs[uiFrameIndex]);
 }

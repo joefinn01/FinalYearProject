@@ -96,6 +96,9 @@ protected:
 	bool CreateAccelerationStructures();
 
 	bool CreateShaderTables();
+	bool CreateRayGenShaderTable();
+	bool CreateMissShaderTable();
+	bool CreateHitGroupShaderTable();
 
 	bool CreateOutputBuffer();
 
@@ -144,8 +147,6 @@ protected:
 	void IncrementFenceValue();
 
 	static App* m_pApp;
-
-	Camera* m_pCamera = nullptr;
 
 	Timer m_Timer;
 
