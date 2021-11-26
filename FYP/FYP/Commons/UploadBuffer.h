@@ -102,6 +102,11 @@ public:
 		memcpy(&m_pMappedData[iIndex * m_uiByteSize], &data, sizeof(T));
 	}
 
+	D3D12_GPU_VIRTUAL_ADDRESS GetBufferGPUAddress(UINT uiCount)
+	{
+		return m_pUploadBuffer.Get()->GetGPUVirtualAddress() + (uiCount * m_uiByteSize);
+	}
+
 protected:
 
 private:

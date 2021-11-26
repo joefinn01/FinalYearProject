@@ -1,5 +1,7 @@
 #include "MathHelper.h"
 
+#include "Include/DirectX/d3dx12.h"
+
 using namespace DirectX;
 
 UINT MathHelper::Calculate32AlignedBufferSize(UINT size)
@@ -19,7 +21,7 @@ UINT MathHelper::CalculateAlignedSize(UINT uiSize, UINT uiAlignment)
 
 UINT MathHelper::CalculatePaddedConstantBufferSize(UINT size)
 {
-	return CalculateAlignedSize(size, 256);
+	return CalculateAlignedSize(size, D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
 }
 
 XMFLOAT4X4 MathHelper::Identity()

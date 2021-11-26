@@ -1,12 +1,13 @@
 #include "App.h"
 #include "Commons/Timer.h"
 #include "Shaders/ConstantBuffers.h"
-#include "Commons/Vertices.h"
+#include "Shaders/Vertices.h"
 #include "Commons/ShaderTable.h"
 #include "Helpers/DebugHelper.h"
 #include "Helpers/MathHelper.h"
 #include "Helpers/DXRHelper.h"
 #include "Managers/WindowManager.h"
+#include "Managers/InputManager.h"
 
 #if PIX
 #include "pix3.h"
@@ -65,20 +66,27 @@ bool App::Init()
 	//Create debug controller
 	hr = D3D12GetDebugInterface(IID_PPV_ARGS(m_pDebug.GetAddressOf()));
 
-	ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> pDredSettings;
-
-	hr = D3D12GetDebugInterface(IID_PPV_ARGS(pDredSettings.GetAddressOf()));
-
-	pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-	pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-	pDredSettings->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-
 	if (FAILED(hr))
 	{
 		LOG_ERROR(tag, L"Failed to create Debug controller!");
 
 		uiDXGIFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 	}
+
+#if DRED
+	ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> pDredSettings;
+
+	hr = D3D12GetDebugInterface(IID_PPV_ARGS(pDredSettings.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create DRED interface!");
+	}
+
+	pDredSettings->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+	pDredSettings->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+	pDredSettings->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+#endif
 
 	m_pDebug->EnableDebugLayer();
 #endif
@@ -121,7 +129,7 @@ bool App::Init()
 		return false;
 	}
 
-	if (CreateGlobalSignature() == false)
+	if (CreateSignatures() == false)
 	{
 		return false;
 	}
@@ -144,6 +152,8 @@ bool App::Init()
 	}
 
 	CreateCBUploadBuffers();
+
+	InitScene();
 
 	if (CreateShaderTables() == false)
 	{
@@ -206,7 +216,11 @@ std::wstring App::GetPixGpuCapturePath()
 
 void App::Update(const Timer& kTimer)
 {
+	InputManager::GetInstance()->Update(kTimer);
 
+	m_pCamera->Update(kTimer);
+
+	UpdatePerFrameCB(m_uiFrameIndex);
 }
 
 void App::OnResize()
@@ -322,11 +336,13 @@ void App::Draw()
 	
 	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(0, GetSrvUavDescriptorHandleGPU(GlobalRootSignatureParams::OUTPUT));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::OUTPUT, GetSrvUavDescriptorHandleGPU(GlobalRootSignatureParams::OUTPUT));
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(1, GetSrvUavDescriptorHandleGPU(GlobalRootSignatureParams::ACCELERATION_STRUCTURE));
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_pTopLevelAccelerationStructure->GetGPUVirtualAddress());
 
-	m_pGraphicsCommandList->SetComputeRootConstantBufferView(2, m_pRayGenCB->Get()->GetGPUVirtualAddress());
+	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
+
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, GetSrvUavDescriptorHandleGPU(1));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -360,6 +376,7 @@ void App::Draw()
 	{
 		LOG_ERROR(tag, L"Failed to present the current frame!");
 
+#if DRED
 		if (hr == DXGI_ERROR_DEVICE_REMOVED)
 		{
 			ComPtr<ID3D12DeviceRemovedExtendedData1> pDred;
@@ -370,6 +387,7 @@ void App::Draw()
 			pDred->GetAutoBreadcrumbsOutput1(&DredAutoBreadcrumbsOutput);
 			pDred->GetPageFaultAllocationOutput(&DredPageFaultOutput);
 		}
+#endif
 
 		return;
 	}
@@ -545,6 +563,9 @@ LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		return 0;
 
 	case WM_KEYUP:
+
+		InputManager::GetInstance()->KeyUp((int)wParam);
+
 		if (wParam == VK_ESCAPE)
 		{
 			PostQuitMessage(0);
@@ -556,6 +577,7 @@ LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		return 0;
 
 	case WM_KEYDOWN:
+		InputManager::GetInstance()->KeyDown((int)wParam);
 		return 0;
 	}
 
@@ -860,6 +882,12 @@ bool App::CreateStateObject()
 	//Set root signatures
 
 	//Local
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT* pLocalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
+	pLocalRootSignature->SetRootSignature(m_pLocalRootSignature.Get());
+
+	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT* pAssociation = pipelineDesc.CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
+	pAssociation->SetSubobjectToAssociate(*pLocalRootSignature);
+	pAssociation->AddExport(m_kwsHitGroupName);
 
 	//Global
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
@@ -929,35 +957,77 @@ bool App::CompileShaders()
 
 void App::CreateGeometry()
 {
-	//Create index buffer
+	// Cube indices.
 	UINT16 indices[] =
 	{
-		0, 1, 2
+		3,1,0,
+		2,1,3,
+
+		6,4,5,
+		7,4,6,
+
+		11,9,8,
+		10,9,11,
+
+		14,12,13,
+		15,12,14,
+
+		19,17,16,
+		18,17,19,
+
+		22,20,21,
+		23,20,22
 	};
 
-	m_pTriIndices = new UploadBuffer<UINT16>(m_pDevice.Get(), sizeof(indices) / sizeof(UINT16), false);
-	
-	for (int i = 0; i < sizeof(indices) / sizeof(UINT16); ++i)
+	// Cube vertices positions and corresponding triangle normals.
+	Vertex vertices[] =
 	{
-		m_pTriIndices->CopyData(i, indices[i]);
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+	};
+
+	m_uiNumVertices = ARRAYSIZE(vertices);
+	m_uiNumIndices = sizeof(indices) / sizeof(UINT16);
+
+	m_pTriVertices = new UploadBuffer<Vertex>(m_pDevice.Get(), m_uiNumVertices, false);
+
+	for (UINT i = 0; i < m_uiNumVertices; ++i)
+	{
+		m_pTriVertices->CopyData((int)i, vertices[i]);
 	}
 
-	//Create vertex buffer
-	float fDepthValue = 1.0;
-	float fOffset = 0.7f;
+	m_pTriIndices = new UploadBuffer<UINT16>(m_pDevice.Get(), m_uiNumIndices, false);
 
-	Vertex vertices[]
+	for (UINT i = 0; i < m_uiNumIndices; ++i)
 	{
-		Vertex(XMFLOAT3(0, -fOffset, fDepthValue)),
-		Vertex(XMFLOAT3(-fOffset, fOffset, fDepthValue)),
-		Vertex(XMFLOAT3(fOffset, fOffset, fDepthValue))
-	};
-
-	m_pTriVertices = new UploadBuffer<Vertex>(m_pDevice.Get(), sizeof(vertices) / sizeof(Vertex), false);
-
-	for (int i = 0; i < sizeof(vertices) / sizeof(Vertex); ++i)
-	{
-		m_pTriVertices->CopyData(i, vertices[i]);
+		m_pTriIndices->CopyData((int)i, indices[i]);
 	}
 }
 
@@ -1095,10 +1165,18 @@ bool App::CreateShaderTables()
 	m_pMissTable = missTable.GetBuffer();
 	m_uiMissRecordSize = missTable.GetRecordSize();
 
-	//Create hit group shader table
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+	struct HitGroupRootArgs
+	{
+		CubeCB cubeCB;
+	};
 
-	if (hitGroupTable.AddRecord(ShaderRecord(nullptr, 0, pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	HitGroupRootArgs hitGroupRootArgs;
+	hitGroupRootArgs.cubeCB = m_CubeCB;
+
+	//Create hit group shader table
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+
+	if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 	{
 		return false;
 	}
@@ -1143,23 +1221,7 @@ bool App::CreateOutputBuffer()
 
 void App::CreateCBUploadBuffers()
 {
-	m_pRayGenCB = new UploadBuffer<RayGenerationCB>(m_pDevice.Get(), 1, true);
-
-	float fBorder = 0.1f;
-
-	RayGenerationCB cb;
-	cb.Stencil =
-	{
-		-1 + fBorder, -1 + fBorder * WindowManager::GetInstance()->GetAspectRatio(),
-		1 - fBorder, 1 - fBorder * WindowManager::GetInstance()->GetAspectRatio()
-	};
-
-	cb.View =
-	{
-		-1, -1, 1, 1
-	};
-
-	m_pRayGenCB->CopyData(0, cb);
+	m_pPerFrameCBUpload = new UploadBuffer<ScenePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount, true);
 }
 
 bool App::CheckRaytracingSupport()
@@ -1183,6 +1245,41 @@ bool App::CheckRaytracingSupport()
 	}
 
 	return true;
+}
+
+void App::CreateCameras()
+{
+	m_pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 1), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
+
+}
+
+void App::InitScene()
+{
+	CreateCameras();
+
+	InitConstantBuffers();
+}
+
+void App::InitConstantBuffers()
+{
+	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	{
+		m_PerFrameCBs[i].LightAmbientColor = XMVectorSet(0.5f, 0.5f, 0.5f, 1.0f);
+		m_PerFrameCBs[i].LightDiffuseColor = XMVectorSet(0.5f, 0.0f, 0.0f, 1.0f);
+		m_PerFrameCBs[i].LightPosW = XMVectorSet(0, 0, -2, 1);
+
+		UpdatePerFrameCB(i);
+	}
+
+	m_CubeCB.Albedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void App::UpdatePerFrameCB(UINT uiFrameIndex)
+{
+	m_PerFrameCBs[uiFrameIndex].EyePosW = XMLoadFloat3(&m_pCamera->GetPosition());
+	m_PerFrameCBs[uiFrameIndex].InvWorldProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, XMLoadFloat4x4(&m_pCamera->GetViewProjectionMatrix())));
+
+	m_pPerFrameCBUpload->CopyData(uiFrameIndex, m_PerFrameCBs[uiFrameIndex]);
 }
 
 void App::LogAdapters()
@@ -1262,18 +1359,12 @@ void App::ExecuteCommandList()
 
 D3D12_CPU_DESCRIPTOR_HANDLE App::GetSrvUavDescriptorHandleCPU(UINT index)
 {
-	CD3DX12_CPU_DESCRIPTOR_HANDLE handle;
-	handle.InitOffsetted(m_pSrvUavHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)index * m_uiSrvUavDescriptorSize);
-
-	return handle;
+	return CD3DX12_CPU_DESCRIPTOR_HANDLE(m_pSrvUavHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)index, m_uiSrvUavDescriptorSize);
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE App::GetSrvUavDescriptorHandleGPU(UINT index)
 {
-	CD3DX12_GPU_DESCRIPTOR_HANDLE handle;
-	handle.InitOffsetted(m_pSrvUavHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)index * m_uiSrvUavDescriptorSize);
-
-	return handle;
+	return CD3DX12_GPU_DESCRIPTOR_HANDLE(m_pSrvUavHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)index, m_uiSrvUavDescriptorSize);
 }
 
 ID3D12Resource* App::GetBackBuffer() const
@@ -1341,21 +1432,28 @@ void App::IncrementFenceValue()
 	++m_FrameResources[m_uiFrameIndex].m_uiFenceValue;
 }
 
-bool App::CreateGlobalSignature()
+bool App::CreateSignatures()
 {
-	CD3DX12_DESCRIPTOR_RANGE outputTable;
-	outputTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, (UINT)1, 0);
+	if (CreateGlobalSignature() == false)
+	{
+		return false;
+	}
 
-	CD3DX12_DESCRIPTOR_RANGE accelTable;
-	accelTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 0);
+	if (CreateLocalSignature() == false)
+	{
+		return false;
+	}
 
-	CD3DX12_ROOT_PARAMETER slotRootParameter[3] = {};
-	slotRootParameter[0].InitAsDescriptorTable(1, &outputTable);	//Render target
-	slotRootParameter[1].InitAsDescriptorTable(1, &accelTable);	//Reference to TLAS
-	slotRootParameter[2].InitAsConstantBufferView(0);	//Constant buffer
+	return true;
+}
+
+bool App::CreateLocalSignature()
+{
+	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
+	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(CubeCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-	rootSignatureDesc.Init((UINT)_countof(slotRootParameter), slotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_NONE);
+	rootSignatureDesc.Init((UINT)_countof(slotRootParameter), slotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
 
 	ComPtr<ID3DBlob> pSignature;
 	ComPtr<ID3DBlob> pError;
@@ -1364,18 +1462,64 @@ bool App::CreateGlobalSignature()
 
 	if (FAILED(hr))
 	{
-		LOG_ERROR(tag, L"Failed to create ray gen serialize root signature!");
+		LOG_ERROR(tag, L"Failed to create local serialize root signature!");
 
 		OutputDebugStringA((char*)pError->GetBufferPointer());
 
 		return false;
 	}
 
-	hr = m_pDevice->CreateRootSignature(0, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(m_pGlobalRootSignature.GetAddressOf()));
+	hr = m_pDevice->CreateRootSignature(0, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(m_pLocalRootSignature.GetAddressOf()));
 
 	if (FAILED(hr))
 	{
-		LOG_ERROR(tag, L"Failed to create ray gen root signature!");
+		LOG_ERROR(tag, L"Failed to create local root signature!");
+
+		return false;
+	}
+
+	return true;
+}
+
+bool App::CreateGlobalSignature()
+{
+	CD3DX12_DESCRIPTOR_RANGE outputRange;
+	outputRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
+
+	CD3DX12_DESCRIPTOR_RANGE accelRange;
+	accelRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
+
+	CD3DX12_DESCRIPTOR_RANGE indexVertexRange;
+	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
+
+	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
+	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
+	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);	//Reference to TLAS
+	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
+	slotRootParameter[GlobalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
+
+	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+	rootSignatureDesc.Init((UINT)ARRAYSIZE(slotRootParameter), slotRootParameter);
+
+	ComPtr<ID3DBlob> pSignature;
+	ComPtr<ID3DBlob> pError;
+
+	HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, pSignature.GetAddressOf(), pError.GetAddressOf());
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create global serialize root signature!");
+
+		OutputDebugStringA((char*)pError->GetBufferPointer());
+
+		return false;
+	}
+
+	hr = m_pDevice->CreateRootSignature(1, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(&m_pGlobalRootSignature));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create global root signature!");
 
 		return false;
 	}
@@ -1388,29 +1532,47 @@ void App::PopulateDescriptorHeaps()
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 
-	m_pDevice->CreateUnorderedAccessView(m_pRaytracingOutput.Get(), nullptr, &uavDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::OUTPUT));
+	m_pDevice->CreateUnorderedAccessView(m_pRaytracingOutput.Get(), nullptr, &uavDesc, GetSrvUavDescriptorHandleCPU(0));
 
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
-	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.RaytracingAccelerationStructure.Location = m_pTopLevelAccelerationStructure.Get()->GetGPUVirtualAddress();
+	//Create Index srv
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Buffer.NumElements = (sizeof(UINT16) * m_uiNumIndices) / 4;
+		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+		srvDesc.Buffer.StructureByteStride = 0;
 
-	// Write the acceleration structure view in the heap 
-	m_pDevice->CreateShaderResourceView(nullptr, &srvDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::ACCELERATION_STRUCTURE));
+		m_pDevice->CreateShaderResourceView(m_pTriIndices->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
+	}
 
-	//Create constant buffer uav
-	D3D12_CONSTANT_BUFFER_VIEW_DESC rayGenDesc = {};
-	rayGenDesc.BufferLocation = m_pRayGenCB->Get()->GetGPUVirtualAddress();
-	rayGenDesc.SizeInBytes = MathHelper::CalculatePaddedConstantBufferSize(sizeof(RayGenerationCB));
 
-	m_pDevice->CreateConstantBufferView(&rayGenDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::SCENE_CB));
+	//Create Vertex srv
+	{
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Buffer.NumElements = m_uiNumVertices;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+		srvDesc.Buffer.StructureByteStride = sizeof(Vertex);
+
+		m_pDevice->CreateShaderResourceView(m_pTriVertices->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
+	}
+
+	////Create constant buffer uav
+	//D3D12_CONSTANT_BUFFER_VIEW_DESC rayGenDesc = {};
+	//rayGenDesc.BufferLocation = m_pPerFrameCBUpload->Get()->GetGPUVirtualAddress();
+	//rayGenDesc.SizeInBytes = MathHelper::CalculatePaddedConstantBufferSize(sizeof(ScenePerFrameCB));
+
+	//m_pDevice->CreateConstantBufferView(&rayGenDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::PER_FRAME_SCENE_CB));
 }
 
 bool App::CreateDescriptorHeaps()
 {
 	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = (UINT)SrvUavHeapIndex::COUNT;
+	heapDesc.NumDescriptors = 3;
 	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 	heapDesc.NodeMask = 0;

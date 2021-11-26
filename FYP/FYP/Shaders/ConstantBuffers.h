@@ -9,18 +9,19 @@
 using namespace DirectX;
 #endif
 
-struct Viewport
+struct ScenePerFrameCB
 {
-	float Left;
-	float Top;
-	float Right;
-	float Bottom;
+	XMMATRIX InvWorldProjection;
+
+	XMVECTOR EyePosW;
+	XMVECTOR LightPosW;
+	XMVECTOR LightAmbientColor;
+	XMVECTOR LightDiffuseColor;
 };
 
-struct RayGenerationCB
+struct CubeCB
 {
-	Viewport View;
-	Viewport Stencil;
+	XMFLOAT4 Albedo;
 };
 
 #endif // CONSTANT_BUFFERS_H

@@ -11,12 +11,8 @@ using namespace DirectX;
 
 struct Vertex
 {
-	Vertex(XMFLOAT3 pos)
-	{
-		Position = pos;
-	}
-
-	DirectX::XMFLOAT3 Position;
+	XMFLOAT3 Position;
+	XMFLOAT3 Normal;
 };
 
 #endif // VERTICES_H

@@ -161,6 +161,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Apps\App.cpp" />
+    <ClCompile Include="Cameras\Camera.cpp" />
+    <ClCompile Include="Cameras\DebugCamera.cpp" />
     <ClCompile Include="Commons\ShaderTable.cpp" />
     <ClCompile Include="Commons\Timer.cpp" />
     <ClCompile Include="Helpers\DebugHelper.cpp" />
@@ -197,10 +199,13 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleasePix|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Managers\InputManager.cpp" />
     <ClCompile Include="Managers\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h" />
+    <ClInclude Include="Cameras\Camera.h" />
+    <ClInclude Include="Cameras\DebugCamera.h" />
     <ClInclude Include="Commons\ShaderRecord.h" />
     <ClInclude Include="Commons\ShaderTable.h" />
     <ClInclude Include="Commons\Singleton.h" />
@@ -250,6 +255,7 @@
     <ClInclude Include="Include\wsl\stubs\wrl\implements.h" />
     <ClInclude Include="Include\wsl\winadapter.h" />
     <ClInclude Include="Include\wsl\wrladapter.h" />
+    <ClInclude Include="Managers\InputManager.h" />
     <ClInclude Include="Managers\WindowManager.h" />
     <ClInclude Include="Shaders\ConstantBuffers.h" />
     <ClInclude Include="Shaders\HlslCompat.h">

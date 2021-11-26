@@ -7,6 +7,8 @@
 #include "Commons/Singleton.h"
 #include "Commons/Timer.h"
 #include "Commons/UploadBuffer.h"
+#include "Cameras/DebugCamera.h"
+#include "Shaders/ConstantBuffers.h"
 
 #include <unordered_map>
 #include <dxcapi.h>
@@ -26,21 +28,14 @@ struct FrameResources
 	UINT64 m_uiFenceValue = 0;
 };
 
-enum class SrvUavHeapIndex
-{
-	OUTPUT = 0,
-	ACCELERATION_STRUCTURE,
-	CONSTANT_BUFFER,
-	COUNT
-};
-
 namespace GlobalRootSignatureParams
 {
 	enum Value
 	{
 		OUTPUT = 0,
 		ACCELERATION_STRUCTURE,
-		SCENE_CB,
+		PER_FRAME_SCENE_CB,
+		VERTEX_INDEX,
 		COUNT
 	};
 }
@@ -106,11 +101,20 @@ protected:
 
 	void CreateCBUploadBuffers();
 
+	bool CreateSignatures();
+	bool CreateLocalSignature();
 	bool CreateGlobalSignature();
 
 	void PopulateDescriptorHeaps();
 
 	bool CheckRaytracingSupport();
+
+	void CreateCameras();
+
+	void InitScene();
+	void InitConstantBuffers();
+
+	void UpdatePerFrameCB(UINT uiFrameIndex);
 
 	void LogAdapters();
 	void LogAdapterOutputs(IDXGIAdapter* pAdapter, bool bSaveSettings);
@@ -141,6 +145,8 @@ protected:
 
 	static App* m_pApp;
 
+	Camera* m_pCamera = nullptr;
+
 	Timer m_Timer;
 
 	bool m_bPaused = false;
@@ -159,6 +165,7 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pTopLevelAccelerationStructure;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRaytracingOutput;
 
@@ -194,7 +201,13 @@ protected:
 	UploadBuffer<Vertex>* m_pTriVertices = nullptr;
 	UploadBuffer<UINT16>* m_pTriIndices = nullptr;
 
-	UploadBuffer<RayGenerationCB>* m_pRayGenCB = nullptr;
+	UINT m_uiNumIndices = 0;
+	UINT m_uiNumVertices = 0;
+
+	UploadBuffer<ScenePerFrameCB>* m_pPerFrameCBUpload = nullptr;
+	CubeCB m_CubeCB;
+
+	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
 
 	LPCWSTR m_kwsRayGenName = L"RayGen";
 	LPCWSTR m_kwsClosestHitName = L"ClosestHit";

@@ -40,6 +40,9 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{de1abc9d-be79-4781-b447-cfa9c92d4f16}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Cameras">
+      <UniqueIdentifier>{c3e6d8ae-83b0-46b0-9e67-169bcca7de6f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -78,6 +81,15 @@
     </ClCompile>
     <ClCompile Include="Commons\ShaderTable.cpp">
       <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Cameras\Camera.cpp">
+      <Filter>Cameras</Filter>
+    </ClCompile>
+    <ClCompile Include="Cameras\DebugCamera.cpp">
+      <Filter>Cameras</Filter>
+    </ClCompile>
+    <ClCompile Include="Managers\InputManager.cpp">
+      <Filter>Managers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -167,6 +179,15 @@
     </ClInclude>
     <ClInclude Include="Shaders\Vertices.h">
       <Filter>Shaders</Filter>
+    </ClInclude>
+    <ClInclude Include="Cameras\Camera.h">
+      <Filter>Cameras</Filter>
+    </ClInclude>
+    <ClInclude Include="Cameras\DebugCamera.h">
+      <Filter>Cameras</Filter>
+    </ClInclude>
+    <ClInclude Include="Managers\InputManager.h">
+      <Filter>Managers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
