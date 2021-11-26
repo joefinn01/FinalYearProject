@@ -91,6 +91,12 @@
     <ClCompile Include="Managers\InputManager.cpp">
       <Filter>Managers</Filter>
     </ClCompile>
+    <ClCompile Include="GameObjects\GameObject.cpp">
+      <Filter>GameObjects</Filter>
+    </ClCompile>
+    <ClCompile Include="Managers\ObjectManager.cpp">
+      <Filter>Managers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -187,6 +193,12 @@
       <Filter>Cameras</Filter>
     </ClInclude>
     <ClInclude Include="Managers\InputManager.h">
+      <Filter>Managers</Filter>
+    </ClInclude>
+    <ClInclude Include="GameObjects\GameObject.h">
+      <Filter>GameObjects</Filter>
+    </ClInclude>
+    <ClInclude Include="Managers\ObjectManager.h">
       <Filter>Managers</Filter>
     </ClInclude>
   </ItemGroup>

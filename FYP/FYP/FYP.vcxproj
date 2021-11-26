@@ -165,6 +165,7 @@
     <ClCompile Include="Cameras\DebugCamera.cpp" />
     <ClCompile Include="Commons\ShaderTable.cpp" />
     <ClCompile Include="Commons\Timer.cpp" />
+    <ClCompile Include="GameObjects\GameObject.cpp" />
     <ClCompile Include="Helpers\DebugHelper.cpp" />
     <ClCompile Include="Helpers\DXRHelper.cpp" />
     <ClCompile Include="Helpers\MathHelper.cpp" />
@@ -200,6 +201,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Managers\InputManager.cpp" />
+    <ClCompile Include="Managers\ObjectManager.cpp" />
     <ClCompile Include="Managers\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -211,6 +213,7 @@
     <ClInclude Include="Commons\Singleton.h" />
     <ClInclude Include="Commons\Timer.h" />
     <ClInclude Include="Commons\UploadBuffer.h" />
+    <ClInclude Include="GameObjects\GameObject.h" />
     <ClInclude Include="Helpers\DebugHelper.h" />
     <ClInclude Include="Helpers\DXRHelper.h" />
     <ClInclude Include="Helpers\MathHelper.h" />
@@ -256,6 +259,7 @@
     <ClInclude Include="Include\wsl\winadapter.h" />
     <ClInclude Include="Include\wsl\wrladapter.h" />
     <ClInclude Include="Managers\InputManager.h" />
+    <ClInclude Include="Managers\ObjectManager.h" />
     <ClInclude Include="Managers\WindowManager.h" />
     <ClInclude Include="Shaders\ConstantBuffers.h" />
     <ClInclude Include="Shaders\HlslCompat.h">
