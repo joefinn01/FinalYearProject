@@ -1,14 +1,15 @@
 #include "App.h"
 #include "Commons/Timer.h"
+#include "Commons/ShaderTable.h"
 #include "Shaders/ConstantBuffers.h"
 #include "Shaders/Vertices.h"
-#include "Commons/ShaderTable.h"
 #include "Helpers/DebugHelper.h"
 #include "Helpers/MathHelper.h"
 #include "Helpers/DXRHelper.h"
 #include "Managers/WindowManager.h"
 #include "Managers/InputManager.h"
 #include "Managers/ObjectManager.h"
+#include "GameObjects/GameObject.h"
 
 #if PIX
 #include "pix3.h"
@@ -142,6 +143,10 @@ bool App::Init()
 
 	CreateGeometry();
 
+	CreateCBUploadBuffers();
+
+	InitScene();
+
 	if (CreateAccelerationStructures() == false)
 	{
 		return false;
@@ -151,10 +156,6 @@ bool App::Init()
 	{
 		return false;
 	}
-
-	CreateCBUploadBuffers();
-
-	InitScene();
 
 	if (CreateShaderTables() == false)
 	{
@@ -958,78 +959,9 @@ bool App::CompileShaders()
 
 void App::CreateGeometry()
 {
-	// Cube indices.
-	UINT16 indices[] =
-	{
-		3,1,0,
-		2,1,3,
 
-		6,4,5,
-		7,4,6,
 
-		11,9,8,
-		10,9,11,
 
-		14,12,13,
-		15,12,14,
-
-		19,17,16,
-		18,17,19,
-
-		22,20,21,
-		23,20,22
-	};
-
-	// Cube vertices positions and corresponding triangle normals.
-	Vertex vertices[] =
-	{
-		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
-
-		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
-
-		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
-
-		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
-
-		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
-
-		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
-		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
-		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
-		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
-	};
-
-	m_uiNumVertices = ARRAYSIZE(vertices);
-	m_uiNumIndices = sizeof(indices) / sizeof(UINT16);
-
-	m_pTriVertices = new UploadBuffer<Vertex>(m_pDevice.Get(), m_uiNumVertices, false);
-
-	for (UINT i = 0; i < m_uiNumVertices; ++i)
-	{
-		m_pTriVertices->CopyData((int)i, vertices[i]);
-	}
-
-	m_pTriIndices = new UploadBuffer<UINT16>(m_pDevice.Get(), m_uiNumIndices, false);
-
-	for (UINT i = 0; i < m_uiNumIndices; ++i)
-	{
-		m_pTriIndices->CopyData((int)i, indices[i]);
-	}
 }
 
 bool App::CreateAccelerationStructures()
@@ -1046,13 +978,13 @@ bool App::CreateAccelerationStructures()
 	//Create geometry description
 	D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
 	geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometryDesc.Triangles.IndexBuffer = m_pTriIndices->Get()->GetGPUVirtualAddress();
-	geometryDesc.Triangles.IndexCount = (UINT)m_pTriIndices->Get()->GetDesc().Width / sizeof(UINT16);
+	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get()->GetDesc().Width / sizeof(UINT16);
 	geometryDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
 	geometryDesc.Triangles.Transform3x4 = 0;
 	geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-	geometryDesc.Triangles.VertexCount = (UINT)m_pTriVertices->Get()->GetDesc().Width / sizeof(Vertex);
-	geometryDesc.Triangles.VertexBuffer.StartAddress = m_pTriVertices->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get()->GetDesc().Width / sizeof(Vertex);
+	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get()->GetGPUVirtualAddress();
 	geometryDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(Vertex);
 
 	//Set as opaque to allow for more optimization
@@ -1138,6 +1070,16 @@ bool App::CreateAccelerationStructures()
 	return true;
 }
 
+bool App::CreateBLAS()
+{
+	return false;
+}
+
+bool App::CreateTLAS()
+{
+	return false;
+}
+
 bool App::CreateShaderTables()
 {
 	if (CreateRayGenShaderTable() == false)
@@ -1208,13 +1150,18 @@ bool App::CreateHitGroupShaderTable()
 	HitGroupRootArgs hitGroupRootArgs;
 	hitGroupRootArgs.cubeCB = m_CubeCB;
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+	UINT uiNumShaderRecords = ObjectManager::GetInstance()->GetNumGameObjects();
 
-	if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), uiNumShaderRecords, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+
+	for (UINT i = 0; i < ObjectManager::GetInstance()->GetNumGameObjects(); ++i)
 	{
-		LOG_ERROR(tag, L"Failed to add a hit group shader record!");
+		if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+		{
+			LOG_ERROR(tag, L"Failed to add a hit group shader record!");
 
-		return false;
+			return false;
+		}
 	}
 
 	m_pHitGroupTable = hitGroupTable.GetBuffer();
@@ -1294,6 +1241,9 @@ void App::CreateCameras()
 
 void App::InitScene()
 {
+	GameObject* pGameObject = new GameObject();
+	pGameObject->Init("Box1", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1));
+
 	CreateCameras();
 
 	InitConstantBuffers();
@@ -1580,12 +1530,12 @@ void App::PopulateDescriptorHeaps()
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = (sizeof(UINT16) * m_uiNumIndices) / 4;
+		srvDesc.Buffer.NumElements = (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetNumIndices()) / 4;
 		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 		srvDesc.Buffer.StructureByteStride = 0;
 
-		m_pDevice->CreateShaderResourceView(m_pTriIndices->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
+		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
 	}
 
 
@@ -1594,20 +1544,13 @@ void App::PopulateDescriptorHeaps()
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = m_uiNumVertices;
+		srvDesc.Buffer.NumElements = ObjectManager::GetInstance()->GetGameObject("Box1")->GetNumVertices();
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		srvDesc.Buffer.StructureByteStride = sizeof(Vertex);
 
-		m_pDevice->CreateShaderResourceView(m_pTriVertices->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
+		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
 	}
-
-	////Create constant buffer uav
-	//D3D12_CONSTANT_BUFFER_VIEW_DESC rayGenDesc = {};
-	//rayGenDesc.BufferLocation = m_pPerFrameCBUpload->Get()->GetGPUVirtualAddress();
-	//rayGenDesc.SizeInBytes = MathHelper::CalculatePaddedConstantBufferSize(sizeof(ScenePerFrameCB));
-
-	//m_pDevice->CreateConstantBufferView(&rayGenDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::PER_FRAME_SCENE_CB));
 }
 
 bool App::CreateDescriptorHeaps()

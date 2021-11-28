@@ -1,5 +1,7 @@
 #include "GameObject.h"
 #include "Managers/ObjectManager.h"
+#include "Shaders/Vertices.h"
+#include "Apps/App.h"
 
 using namespace DirectX;
 
@@ -22,6 +24,81 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 	m_Scale = scale;
 
 	m_eType = GameObjectType::BASE;
+
+	// Cube indices.
+	UINT16 indices[] =
+	{
+		3,1,0,
+		2,1,3,
+
+		6,4,5,
+		7,4,6,
+
+		11,9,8,
+		10,9,11,
+
+		14,12,13,
+		15,12,14,
+
+		19,17,16,
+		18,17,19,
+
+		22,20,21,
+		23,20,22
+	};
+
+	// Cube vertices positions and corresponding triangle normals.
+	Vertex vertices[] =
+	{
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, -1.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(-1.0f, 0.0f, 0.0f) },
+
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(1.0f, 0.0f, 0.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT3(0.0f, 0.0f, -1.0f) },
+
+		{ XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+		{ XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT3(0.0f, 0.0f, 1.0f) },
+	};
+
+	m_uiNumVertices = ARRAYSIZE(vertices);
+	m_uiNumIndices = sizeof(indices) / sizeof(UINT16);
+
+	ID3D12Device* pDevice = App::GetApp()->GetDevice();
+
+	m_pVertices = new UploadBuffer<Vertex>(pDevice, m_uiNumVertices, false);
+
+	for (UINT i = 0; i < m_uiNumVertices; ++i)
+	{
+		m_pVertices->CopyData((int)i, vertices[i]);
+	}
+
+	m_pIndices = new UploadBuffer<UINT16>(pDevice, m_uiNumIndices, false);
+
+	for (UINT i = 0; i < m_uiNumIndices; ++i)
+	{
+		m_pIndices->CopyData((int)i, indices[i]);
+	}
 
 	ObjectManager::GetInstance()->AddGameObject(this);
 
@@ -201,6 +278,26 @@ DirectX::XMFLOAT4X4 GameObject::GetWorldMatrix() const
 	XMStoreFloat4x4(&world, XMMatrixScaling(m_Scale.x, m_Scale.y, m_Scale.z) * XMMatrixRotationQuaternion(XMLoadFloat4(&m_Rotation)) * XMMatrixTranslation(m_Position.x, m_Position.y, m_Position.z));
 
 	return world;
+}
+
+const UploadBuffer<Vertex>* GameObject::GetVertexUploadBuffer() const
+{
+	return m_pVertices;
+}
+
+const UploadBuffer<UINT16>* GameObject::GetIndexUploadBuffer() const
+{
+	return m_pIndices;
+}
+
+UINT GameObject::GetNumVertices() const
+{
+	return m_uiNumVertices;
+}
+
+UINT GameObject::GetNumIndices() const
+{
+	return m_uiNumIndices;
 }
 
 void GameObject::UpdateAxisVectors()

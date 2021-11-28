@@ -94,6 +94,8 @@ protected:
 	void CreateGeometry();
 
 	bool CreateAccelerationStructures();
+	bool CreateBLAS();
+	bool CreateTLAS();
 
 	bool CreateShaderTables();
 	bool CreateRayGenShaderTable();
@@ -198,12 +200,6 @@ protected:
 	UINT m_uiMissRecordSize;
 	UINT m_uiHitGroupRecordSize;
 	UINT m_uiRayGenRecordSize;
-
-	UploadBuffer<Vertex>* m_pTriVertices = nullptr;
-	UploadBuffer<UINT16>* m_pTriIndices = nullptr;
-
-	UINT m_uiNumIndices = 0;
-	UINT m_uiNumVertices = 0;
 
 	UploadBuffer<ScenePerFrameCB>* m_pPerFrameCBUpload = nullptr;
 	CubeCB m_CubeCB;
