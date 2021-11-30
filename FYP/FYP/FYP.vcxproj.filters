@@ -43,6 +43,9 @@
     <Filter Include="Cameras">
       <UniqueIdentifier>{c3e6d8ae-83b0-46b0-9e67-169bcca7de6f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Include\tinygltf">
+      <UniqueIdentifier>{5aba03ff-887f-4d41-ab57-fefd80710c48}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -95,6 +98,9 @@
       <Filter>GameObjects</Filter>
     </ClCompile>
     <ClCompile Include="Managers\ObjectManager.cpp">
+      <Filter>Managers</Filter>
+    </ClCompile>
+    <ClCompile Include="Managers\MeshManager.cpp">
       <Filter>Managers</Filter>
     </ClCompile>
   </ItemGroup>
@@ -200,6 +206,21 @@
     </ClInclude>
     <ClInclude Include="Managers\ObjectManager.h">
       <Filter>Managers</Filter>
+    </ClInclude>
+    <ClInclude Include="Managers\MeshManager.h">
+      <Filter>Managers</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\tinygltf\json.hpp">
+      <Filter>Include\tinygltf</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\tinygltf\stb_image.h">
+      <Filter>Include\tinygltf</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\tinygltf\stb_image_write.h">
+      <Filter>Include\tinygltf</Filter>
+    </ClInclude>
+    <ClInclude Include="Include\tinygltf\tiny_gltf.h">
+      <Filter>Include\tinygltf</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

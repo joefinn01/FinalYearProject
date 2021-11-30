@@ -201,6 +201,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Managers\InputManager.cpp" />
+    <ClCompile Include="Managers\MeshManager.cpp" />
     <ClCompile Include="Managers\ObjectManager.cpp" />
     <ClCompile Include="Managers\WindowManager.cpp" />
   </ItemGroup>
@@ -249,6 +250,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleasePix|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="Include\tinygltf\json.hpp" />
+    <ClInclude Include="Include\tinygltf\stb_image.h" />
+    <ClInclude Include="Include\tinygltf\stb_image_write.h" />
+    <ClInclude Include="Include\tinygltf\tiny_gltf.h" />
     <ClInclude Include="Include\wsl\stubs\OAIdl.h" />
     <ClInclude Include="Include\wsl\stubs\OCIdl.h" />
     <ClInclude Include="Include\wsl\stubs\rpc.h" />
@@ -259,6 +264,7 @@
     <ClInclude Include="Include\wsl\winadapter.h" />
     <ClInclude Include="Include\wsl\wrladapter.h" />
     <ClInclude Include="Managers\InputManager.h" />
+    <ClInclude Include="Managers\MeshManager.h" />
     <ClInclude Include="Managers\ObjectManager.h" />
     <ClInclude Include="Managers\WindowManager.h" />
     <ClInclude Include="Shaders\ConstantBuffers.h" />

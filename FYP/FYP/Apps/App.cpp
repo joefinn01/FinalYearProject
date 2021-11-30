@@ -9,6 +9,7 @@
 #include "Managers/WindowManager.h"
 #include "Managers/InputManager.h"
 #include "Managers/ObjectManager.h"
+#include "Managers/MeshManager.h"
 #include "GameObjects/GameObject.h"
 
 #if PIX
@@ -102,6 +103,8 @@ bool App::Init()
 
 		return false;
 	}
+
+	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf");
 
 	//Log adapters before initialising anything else so we can get the correct window dimensions and refresh rate
 	LogAdapters();
