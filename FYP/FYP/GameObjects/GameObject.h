@@ -8,6 +8,7 @@
 class Timer;
 
 struct Vertex;
+struct Mesh;
 
 enum class GameObjectType
 {
@@ -22,7 +23,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -67,6 +68,9 @@ public:
 	UINT GetNumVertices() const;
 	UINT GetNumIndices() const;
 
+	Mesh* GetMesh() const;
+	void SetMesh(Mesh* pMesh);
+
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
 
@@ -87,5 +91,7 @@ private:
 
 	UINT m_uiNumVertices = 0;
 	UINT m_uiNumIndices = 0;
+
+	Mesh* m_pMesh = nullptr;
 };
 

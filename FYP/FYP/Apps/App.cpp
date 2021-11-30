@@ -104,7 +104,7 @@ bool App::Init()
 		return false;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf");
+	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf", "Box");
 
 	//Log adapters before initialising anything else so we can get the correct window dimensions and refresh rate
 	LogAdapters();
@@ -1244,8 +1244,11 @@ void App::CreateCameras()
 
 void App::InitScene()
 {
+	Mesh* pMesh = nullptr;
+	MeshManager::GetInstance()->GetMesh("Box", pMesh);
+
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Box1", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1));
+	pGameObject->Init("Box1", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
 
 	CreateCameras();
 

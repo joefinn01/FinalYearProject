@@ -13,7 +13,7 @@ GameObject::~GameObject()
 {
 }
 
-bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale)
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh)
 {
 	m_sName = sName;
 
@@ -99,6 +99,8 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 	{
 		m_pIndices->CopyData((int)i, indices[i]);
 	}
+
+	m_pMesh = pMesh;
 
 	ObjectManager::GetInstance()->AddGameObject(this);
 
@@ -298,6 +300,16 @@ UINT GameObject::GetNumVertices() const
 UINT GameObject::GetNumIndices() const
 {
 	return m_uiNumIndices;
+}
+
+Mesh* GameObject::GetMesh() const
+{
+	return m_pMesh;
+}
+
+void GameObject::SetMesh(Mesh* pMesh)
+{
+	m_pMesh = pMesh;
 }
 
 void GameObject::UpdateAxisVectors()

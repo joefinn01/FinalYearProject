@@ -2,10 +2,11 @@
 #include "Include/tinygltf/tiny_gltf.h"
 #include "Helpers/DebugHelper.h"
 #include "Shaders/Vertices.h"
+#include "Apps/App.h"
 
 Tag tag = L"MeshManager";
 
-bool MeshManager::LoadMesh(const std::string& sFilename)
+bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sName)
 {
 	tinygltf::Model model;
 	tinygltf::TinyGLTF loader;
@@ -14,7 +15,7 @@ bool MeshManager::LoadMesh(const std::string& sFilename)
 
 	bool bSuccess = loader.LoadASCIIFromFile(&model, &err, &warn, sFilename);
 
-	Mesh mesh;
+	Mesh* pMesh = new Mesh();
 
 	if (!warn.empty()) 
 	{
@@ -49,8 +50,34 @@ bool MeshManager::LoadMesh(const std::string& sFilename)
 
 	for (UINT i = 0; i < pScene->nodes.size(); ++i)
 	{
-		ProcessNode(nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, &mesh, &vertexBuffer, &indexBuffer);
+		if (ProcessNode(nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, pMesh, &vertexBuffer, &indexBuffer) == false)
+		{
+			return false;
+		}
 	}
+
+	pMesh->m_pVertexBuffer = new UploadBuffer<Vertex>(App::GetApp()->GetDevice(), vertexBuffer.size(), false);
+
+	for (UINT i = 0; i < vertexBuffer.size(); ++i)
+	{
+		pMesh->m_pVertexBuffer->CopyData(i, vertexBuffer[i]);
+	}
+
+	pMesh->m_pIndexBuffer = new UploadBuffer<UINT16>(App::GetApp()->GetDevice(), indexBuffer.size(), false);
+
+	for (UINT i = 0; i < indexBuffer.size(); ++i)
+	{
+		pMesh->m_pIndexBuffer->CopyData(i, indexBuffer[i]);
+	}
+
+	if (m_Meshes.count(sName) != 0)
+	{
+		LOG_ERROR(tag, L"Tried to create a new mesh called %s but one with that name already exists!", sName);
+
+		return false;
+	}
+
+	m_Meshes[sName] = pMesh;
 
 	return true;
 }
@@ -101,7 +128,10 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 	for (UINT i = 0; i < kNode.children.size(); ++i)
 	{
-		ProcessNode(pNode, kModel.nodes[kNode.children[i]], kNode.children[i], kModel, pMesh, pVertexBuffer, pIndexBuffer);
+		if (ProcessNode(pNode, kModel.nodes[kNode.children[i]], kNode.children[i], kModel, pMesh, pVertexBuffer, pIndexBuffer) == false)
+		{
+			return false;
+		}
 	}
 
 	if (kNode.mesh >= 0)
@@ -135,33 +165,41 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 			Vertex vertex = {};
 
-			for (UINT i = 0; i < uiVertexCount; ++i)
+			for (UINT j = 0; j < uiVertexCount; ++j)
 			{
-				vertex.Position = XMFLOAT3(kpfPositionBuffer[i * uiPositionStride], kpfPositionBuffer[(i * uiPositionStride) + 1], kpfPositionBuffer[(i * uiPositionStride) + 2]);
-				//vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[i * uiTexCoordStride0], kpfTexCoordBuffer0[(i * 2 + 1) * uiTexCoordStride0]);
-				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[i * 2 * uiTexCoordStride1], kpfTexCoordBuffer1[(i * 2 + 1) * uiTexCoordStride1]);
+				vertex.Position = XMFLOAT3(kpfPositionBuffer[j * uiPositionStride], kpfPositionBuffer[(j * uiPositionStride) + 1], kpfPositionBuffer[(j * uiPositionStride) + 2]);
+				//vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
+				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[j * uiTexCoordStride1], kpfTexCoordBuffer1[(j * uiTexCoordStride1) + 1]);
 
-				XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[i * uiNormalStride], kpfNormalBuffer[(i * uiNormalStride) + 1], kpfNormalBuffer[(i * uiNormalStride) + 2], 0.0f)));
+				XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
 
 				pVertexBuffer->push_back(vertex);
 			}
 
 			if (bHasIndices == true)
 			{
-				const tinygltf::Accessor* kpAccessor;
-
-				if (kPrimitive.indices >= 0)
+				if (GetIndexData(kModel, kPrimitive, pIndexBuffer, &uiIndexCount, uiVertexStart) == false)
 				{
-					kpAccessor = &kModel.accessors[kPrimitive.indices];
+					return false;
 				}
-				else
-				{
-					kpAccessor = &kModel.accessors[0];
-				}
-
-				const tinygltf::BufferView& kBufferView = kModel.bufferViews[kpAccessor->bufferView];
 			}
+
+			Primitive* pPrimitive = new Primitive();
+			pPrimitive->m_uiFirstIndex = uiIndexStart;
+			pPrimitive->m_uiNumIndices = uiIndexCount;
+			pPrimitive->m_uiNumVertices = uiVertexCount;
+
+			pNode->m_Primitives.push_back(pPrimitive);
 		}
+	}
+
+	if (pParentNode != nullptr)
+	{
+		pParentNode->m_ChildNodes.push_back(pNode);
+	}
+	else
+	{
+		pMesh->m_pRootNode = pNode;
 	}
 
 	return true;
@@ -200,6 +238,34 @@ bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf
 	return true;
 }
 
+bool MeshManager::GetMesh(std::string sName, Mesh* pMesh)
+{
+	if (m_Meshes.count(sName) == 0)
+	{
+		LOG_ERROR(tag, L"Tried to get a mesh called %s but one with that name doesn't exist!", sName);
+
+		return false;
+	}
+
+	pMesh = m_Meshes[sName];
+
+	return true;
+}
+
+bool MeshManager::RemoveMesh(std::string sName)
+{
+	if (m_Meshes.count(sName) == 0)
+	{
+		LOG_ERROR(tag, L"Tried to remove a mesh called %s but one with that name doesn't exist!", sName);
+
+		return false;
+	}
+
+	m_Meshes.erase(sName);
+
+	return true;
+}
+
 bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer0, UINT* puiTexCoordStride0, const float** kppfTexCoordBuffer1, UINT* puiTexCoordStride1, UINT16* puiVertexCount)
 {
 	if (GetAttributeData(kModel, kPrimitive, "POSITION", kppfPositionBuffer, puiPositionStride, puiVertexCount, TINYGLTF_TYPE_VEC3) == false)
@@ -221,6 +287,70 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 	//{
 	//	return false;
 	//}
+
+	return true;
+}
+
+bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT16* puiIndexCount, const UINT16& kuiVertexStart)
+{
+	const tinygltf::Accessor* kpAccessor;
+
+	if (kPrimitive.indices >= 0)
+	{
+		kpAccessor = &kModel.accessors[kPrimitive.indices];
+	}
+	else
+	{
+		kpAccessor = &kModel.accessors[0];
+	}
+
+	const tinygltf::BufferView& kBufferView = kModel.bufferViews[kpAccessor->bufferView];
+	const tinygltf::Buffer& kBuffer = kModel.buffers[kBufferView.buffer];
+
+	*puiIndexCount = (UINT16)kpAccessor->count;
+
+	const void* pData = &kBuffer.data[kpAccessor->byteOffset + kBufferView.byteOffset];
+
+	switch (kpAccessor->componentType)
+	{
+	case TINYGLTF_PARAMETER_TYPE_UNSIGNED_INT:
+	{
+		const UINT* pUINTData = (const UINT*)pData;
+
+		for (UINT i = 0; i < *puiIndexCount; ++i)
+		{
+			pIndexBuffer->push_back((UINT16)(pUINTData[i]) + kuiVertexStart);
+		}
+	}
+	break;
+
+	case TINYGLTF_PARAMETER_TYPE_UNSIGNED_SHORT:
+	{
+		const UINT16* pUINTData = (const UINT16*)pData;
+
+		for (UINT i = 0; i < *puiIndexCount; ++i)
+		{
+			pIndexBuffer->push_back(pUINTData[i] + kuiVertexStart);
+		}
+	}
+	break;
+
+	case TINYGLTF_PARAMETER_TYPE_UNSIGNED_BYTE:
+	{
+		const uint8_t* pUINTData = (const uint8_t*)pData;
+
+		for (UINT i = 0; i < *puiIndexCount; ++i)
+		{
+			pIndexBuffer->push_back((UINT16)pUINTData[i] + kuiVertexStart);
+		}
+	}
+	break;
+
+	default:
+		LOG_ERROR(tag, L"The tinygltf index data type %i isn't supported!");
+
+		return false;
+	}
 
 	return true;
 }
