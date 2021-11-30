@@ -79,6 +79,9 @@ struct Mesh
 	UploadBuffer<UINT16>* m_pIndexBuffer;
 
 	MeshNode* m_pRootNode = nullptr;
+
+	UINT16 m_uiNumVertices;
+	UINT16 m_uiNumIndices;
 };
 
 class MeshManager : public Singleton<MeshManager>

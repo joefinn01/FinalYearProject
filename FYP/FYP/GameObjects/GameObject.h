@@ -62,12 +62,6 @@ public:
 
 	DirectX::XMFLOAT4X4 GetWorldMatrix() const;
 
-	const UploadBuffer<Vertex>* GetVertexUploadBuffer() const;
-	const UploadBuffer<UINT16>* GetIndexUploadBuffer() const;
-
-	UINT GetNumVertices() const;
-	UINT GetNumIndices() const;
-
 	Mesh* GetMesh() const;
 	void SetMesh(Mesh* pMesh);
 
@@ -85,12 +79,6 @@ private:
 
 	DirectX::XMFLOAT4 m_Up = DirectX::XMFLOAT4(0, 1, 0, 0);
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
-
-	UploadBuffer<Vertex>* m_pVertices = nullptr;
-	UploadBuffer<UINT16>* m_pIndices = nullptr;
-
-	UINT m_uiNumVertices = 0;
-	UINT m_uiNumIndices = 0;
 
 	Mesh* m_pMesh = nullptr;
 };

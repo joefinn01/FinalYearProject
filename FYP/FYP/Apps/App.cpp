@@ -981,13 +981,13 @@ bool App::CreateAccelerationStructures()
 	//Create geometry description
 	D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
 	geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get()->GetGPUVirtualAddress();
-	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get()->GetDesc().Width / sizeof(UINT16);
+	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetDesc().Width / sizeof(UINT16);
 	geometryDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
 	geometryDesc.Triangles.Transform3x4 = 0;
 	geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get()->GetDesc().Width / sizeof(Vertex);
-	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetDesc().Width / sizeof(Vertex);
+	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetGPUVirtualAddress();
 	geometryDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(Vertex);
 
 	//Set as opaque to allow for more optimization
@@ -1536,12 +1536,12 @@ void App::PopulateDescriptorHeaps()
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetNumIndices()) / 4;
+		srvDesc.Buffer.NumElements = (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumIndices) / 4;
 		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 		srvDesc.Buffer.StructureByteStride = 0;
 
-		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetIndexUploadBuffer()->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
+		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
 	}
 
 
@@ -1550,12 +1550,12 @@ void App::PopulateDescriptorHeaps()
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = ObjectManager::GetInstance()->GetGameObject("Box1")->GetNumVertices();
+		srvDesc.Buffer.NumElements = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumVertices;
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		srvDesc.Buffer.StructureByteStride = sizeof(Vertex);
 
-		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetVertexUploadBuffer()->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
+		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
 	}
 }
 

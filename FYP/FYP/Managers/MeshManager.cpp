@@ -70,6 +70,9 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 		pMesh->m_pIndexBuffer->CopyData(i, indexBuffer[i]);
 	}
 
+	pMesh->m_uiNumVertices = vertexBuffer.size();
+	pMesh->m_uiNumIndices = indexBuffer.size();
+
 	if (m_Meshes.count(sName) != 0)
 	{
 		LOG_ERROR(tag, L"Tried to create a new mesh called %s but one with that name already exists!", sName);
