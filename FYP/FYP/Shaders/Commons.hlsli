@@ -66,7 +66,7 @@ void GenerateCameraRay(uint2 index, out float3 origin, out float3 direction)
     float4 PosW = mul(float4(PosS, 0, 1), g_ScenePerFrameCB.InvWorldProjection);
     PosW.xyz /= PosW.w;
     
-    origin = g_ScenePerFrameCB.EyePosW;
+    origin = g_ScenePerFrameCB.EyePosW.xyz;
     direction = normalize(PosW.xyz - origin);
 
 }
@@ -80,7 +80,7 @@ float3 InterpolateAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersecti
 
 float4 CalculateDiffuseLighting(float3 posW, float3 normalW)
 {
-    float3 toLight = normalize(g_ScenePerFrameCB.LightPosW - posW);
+    float3 toLight = normalize(g_ScenePerFrameCB.LightPosW.xyz - posW);
     
     return g_CubeCB.Albedo * g_ScenePerFrameCB.LightDiffuseColor * max(0.0f, dot(toLight, normalW));
 }
