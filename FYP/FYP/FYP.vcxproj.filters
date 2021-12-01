@@ -109,6 +109,18 @@
     <ClCompile Include="Managers\TextureManager.cpp">
       <Filter>Managers</Filter>
     </ClCompile>
+    <ClCompile Include="Commons\Descriptor.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\DescriptorHeap.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\UAVDescriptor.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\SRVDescriptor.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -233,6 +245,18 @@
     </ClInclude>
     <ClInclude Include="Managers\TextureManager.h">
       <Filter>Managers</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\DescriptorHeap.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\Descriptor.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\UAVDescriptor.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\SRVDescriptor.h">
+      <Filter>Commons</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
