@@ -8,6 +8,7 @@
 class Timer;
 
 struct Vertex;
+struct Mesh;
 
 enum class GameObjectType
 {
@@ -22,7 +23,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -61,11 +62,8 @@ public:
 
 	DirectX::XMFLOAT4X4 GetWorldMatrix() const;
 
-	const UploadBuffer<Vertex>* GetVertexUploadBuffer() const;
-	const UploadBuffer<UINT16>* GetIndexUploadBuffer() const;
-
-	UINT GetNumVertices() const;
-	UINT GetNumIndices() const;
+	Mesh* GetMesh() const;
+	void SetMesh(Mesh* pMesh);
 
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
@@ -82,10 +80,6 @@ private:
 	DirectX::XMFLOAT4 m_Up = DirectX::XMFLOAT4(0, 1, 0, 0);
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
 
-	UploadBuffer<Vertex>* m_pVertices = nullptr;
-	UploadBuffer<UINT16>* m_pIndices = nullptr;
-
-	UINT m_uiNumVertices = 0;
-	UINT m_uiNumIndices = 0;
+	Mesh* m_pMesh = nullptr;
 };
 
