@@ -18,6 +18,15 @@ StructuredBuffer<Vertex> Vertices : register(t2, space0);
 ConstantBuffer<ScenePerFrameCB> g_ScenePerFrameCB : register(b0);
 ConstantBuffer<CubeCB> g_CubeCB : register(b1);
 
+Texture2D<float4> g_LocalDiffuse : register(t3);
+
+SamplerState SamPointWrap : register(s0);
+SamplerState SamPointClamp : register(s1);
+SamplerState SamLinearWrap : register(s2);
+SamplerState SamLinearClamp : register(s3);
+SamplerState SamAnisotropicWrap : register(s4);
+SamplerState SamAnisotropicClamp : register(s5);
+
 // Load three 16 bit indices from a byte addressed buffer.
 uint3 Load3x16BitIndices(uint offsetBytes)
 {

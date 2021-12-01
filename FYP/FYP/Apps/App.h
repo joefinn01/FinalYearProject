@@ -11,6 +11,7 @@
 #include "Shaders/ConstantBuffers.h"
 
 #include <unordered_map>
+#include <array>
 #include <dxcapi.h>
 
 
@@ -46,6 +47,7 @@ namespace LocalRootSignatureParams {
 	enum Value 
 	{
 		CUBE_CONSTANTS = 0,
+		DIFFUSE_TEX,
 		COUNT
 	};
 }
@@ -129,6 +131,8 @@ protected:
 
 	void ExecuteCommandList();
 
+	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
+
 	ID3D12Resource* GetBackBuffer() const;
 	ID3D12Resource* GetBackBuffer(int iIndex) const;
 	Microsoft::WRL::ComPtr<ID3D12Resource>* GetBackBufferComptr();
@@ -178,8 +182,6 @@ protected:
 	static const UINT s_kuiSwapChainBufferCount = 2;
 
 	Descriptor* m_pOutputDesc;
-	Descriptor* m_pIndexDesc;
-	Descriptor* m_pVertexDesc;
 
 	UINT m_uiFrameIndex = 0;
 

@@ -4,6 +4,7 @@
 #include "Commons/DescriptorHeap.h"
 #include "Commons/UAVDescriptor.h"
 #include "Commons/SRVDescriptor.h"
+#include "Commons/Texture.h"
 #include "Shaders/ConstantBuffers.h"
 #include "Shaders/Vertices.h"
 #include "Helpers/DebugHelper.h"
@@ -13,6 +14,7 @@
 #include "Managers/InputManager.h"
 #include "Managers/ObjectManager.h"
 #include "Managers/MeshManager.h"
+#include "Managers/TextureManager.h"
 #include "GameObjects/GameObject.h"
 
 #if PIX
@@ -125,11 +127,6 @@ bool App::Init()
 		return false;
 	}
 
-	if (CreateDescriptorHeaps() == false)
-	{
-		return false;
-	}
-
 	if (CompileShaders() == false)
 	{
 		return false;
@@ -147,6 +144,11 @@ bool App::Init()
 
 	CreateGeometry();
 
+	if (CreateDescriptorHeaps() == false)
+	{
+		return false;
+	}
+
 	CreateCBUploadBuffers();
 
 	InitScene();
@@ -161,12 +163,12 @@ bool App::Init()
 		return false;
 	}
 
+	PopulateDescriptorHeaps();
+
 	if (CreateShaderTables() == false)
 	{
 		return false;
 	}
-
-	PopulateDescriptorHeaps();
 
 	OnResize();
 
@@ -351,7 +353,7 @@ void App::Draw()
 
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(m_pIndexDesc->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexDesc->GetDescriptorIndex()));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -957,9 +959,18 @@ bool App::CompileShaders()
 
 void App::CreateGeometry()
 {
-	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf", "Box");
+	HRESULT hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
 
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to reset the graphics command list!");
 
+		return;
+	}
+
+	MeshManager::GetInstance()->LoadMesh("Models/BoxTextured/gLTF/BoxTextured.gltf", "Box", m_pGraphicsCommandList.Get());
+
+	ExecuteCommandList();
 }
 
 bool App::CreateAccelerationStructures()
@@ -1143,10 +1154,12 @@ bool App::CreateHitGroupShaderTable()
 	struct HitGroupRootArgs
 	{
 		CubeCB cubeCB;
+		D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
 	};
 
 	HitGroupRootArgs hitGroupRootArgs;
 	hitGroupRootArgs.cubeCB = m_CubeCB;
+	hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_Textures[0]->GetDescriptor()->GetDescriptorIndex());
 
 	UINT uiNumShaderRecords = ObjectManager::GetInstance()->GetNumGameObjects();
 
@@ -1349,6 +1362,60 @@ void App::ExecuteCommandList()
 	FlushCommandQueue();
 }
 
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> App::GetStaticSamplers()
+{
+	const CD3DX12_STATIC_SAMPLER_DESC pointWrap(
+		0, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
+		1, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
+		2, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearClamp(
+		3, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
+		4, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressW
+		0.0f,                             // mipLODBias
+		8);                               // maxAnisotropy
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicClamp(
+		5, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
+		0.0f,                              // mipLODBias
+		8);                                // maxAnisotropy
+
+	return {
+		pointWrap, pointClamp,
+		linearWrap, linearClamp,
+		anisotropicWrap, anisotropicClamp };
+}
+
 ID3D12Resource* App::GetBackBuffer() const
 {
 	return m_FrameResources[m_uiFrameIndex].m_pRenderTarget.Get();
@@ -1431,8 +1498,13 @@ bool App::CreateSignatures()
 
 bool App::CreateLocalSignature()
 {
+	CD3DX12_DESCRIPTOR_RANGE diffuseTable;
+	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
+
 	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
 	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(CubeCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
+	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsShaderResourceView(3);
+	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init((UINT)_countof(slotRootParameter), slotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
@@ -1480,8 +1552,10 @@ bool App::CreateGlobalSignature()
 	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
 	slotRootParameter[GlobalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
 
+	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
+
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
-	rootSignatureDesc.Init((UINT)ARRAYSIZE(slotRootParameter), slotRootParameter);
+	rootSignatureDesc.Init((UINT)ARRAYSIZE(slotRootParameter), slotRootParameter, (UINT)staticSamplers.size(), staticSamplers.data());
 
 	ComPtr<ID3DBlob> pSignature;
 	ComPtr<ID3DBlob> pError;
@@ -1521,28 +1595,15 @@ void App::PopulateDescriptorHeaps()
 
 	m_pOutputDesc = new UAVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), m_pRaytracingOutput.Get(), D3D12_UAV_DIMENSION_TEXTURE2D);
 
-	//Create index descriptor
-	if (m_pSrvUavHeap->Allocate(uiDescIndex) == false)
-	{
-		return;
-	}
-
-	m_pIndexDesc = new SRVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumIndices) / 4, DXGI_FORMAT_R32_TYPELESS, D3D12_BUFFER_SRV_FLAG_RAW, 0);
-
-	//Create Vertex descriptor
-	if (m_pSrvUavHeap->Allocate(uiDescIndex) == false)
-	{
-		return;
-	}
-
-	m_pVertexDesc = new SRVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex));
+	MeshManager::GetInstance()->CreateDescriptors(m_pSrvUavHeap);
 }
 
 bool App::CreateDescriptorHeaps()
 {
 	m_pSrvUavHeap = new DescriptorHeap();
 
-	if (m_pSrvUavHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 3) == false)
+	//2 descriptors per mesh (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture
+	if (m_pSrvUavHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumMeshes() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1) == false)
 	{
 		return false;
 	}

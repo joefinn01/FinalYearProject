@@ -3,10 +3,41 @@
 #include "Helpers/DebugHelper.h"
 #include "Shaders/Vertices.h"
 #include "Apps/App.h"
+#include "Commons/DescriptorHeap.h"
+#include "Commons/Texture.h"
+#include "Commons/SRVDescriptor.h"
+#include "Managers/TextureManager.h"
 
 Tag tag = L"MeshManager";
 
-bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sName)
+void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
+{
+	UINT uiIndex;
+
+	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
+	{
+		for (int i = 0; i < it->second->m_Textures.size(); ++i)
+		{
+			it->second->m_Textures[i]->CreateDescriptor(pHeap);
+		}
+
+		if (pHeap->Allocate(uiIndex) == false)
+		{
+			return;
+		}
+
+		it->second->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * it->second->m_uiNumIndices) / 4, DXGI_FORMAT_R32_TYPELESS, D3D12_BUFFER_SRV_FLAG_RAW, 0);
+
+		if (pHeap->Allocate(uiIndex) == false)
+		{
+			return;
+		}
+
+		it->second->m_pVertexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, it->second->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex));
+	}
+}
+
+bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sName, ID3D12GraphicsCommandList* pGraphicsCommandList)
 {
 	tinygltf::Model model;
 	tinygltf::TinyGLTF loader;
@@ -31,6 +62,11 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 	{
 		LOG_ERROR(tag, L"Failed to load mesh with name %s!", sFilename);
 
+		return false;
+	}
+
+	if (LoadTextures(pMesh, model, pGraphicsCommandList) == false)
+	{
 		return false;
 	}
 
@@ -171,7 +207,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			for (UINT j = 0; j < uiVertexCount; ++j)
 			{
 				vertex.Position = XMFLOAT3(kpfPositionBuffer[j * uiPositionStride], kpfPositionBuffer[(j * uiPositionStride) + 1], kpfPositionBuffer[(j * uiPositionStride) + 2]);
-				//vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
+				vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
 				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[j * uiTexCoordStride1], kpfTexCoordBuffer1[(j * uiTexCoordStride1) + 1]);
 
 				XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
@@ -241,6 +277,32 @@ bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf
 	return true;
 }
 
+UINT MeshManager::GetNumMeshes() const
+{
+	return m_Meshes.size();
+}
+
+bool MeshManager::LoadTextures(Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)
+{
+	tinygltf::Image image;
+
+	for (UINT i = 0; i < kModel.textures.size(); ++i)
+	{
+		image = kModel.images[kModel.textures[i].source];
+
+		Texture* pTexture;
+
+		if (TextureManager::GetInstance()->LoadTexture(image, pTexture, pGraphicsCommandList) == false)
+		{
+			return false;
+		}
+
+		pMesh->m_Textures.push_back(pTexture);
+	}
+
+	return true;
+}
+
 bool MeshManager::GetMesh(std::string sName, Mesh*& pMesh)
 {
 	if (m_Meshes.count(sName) == 0)
@@ -281,10 +343,10 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 		return false;
 	}
 
-	//if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer0, puiTexCoordStride0, nullptr, TINYGLTF_TYPE_VEC2) == false)
-	//{
-	//	return false;
-	//}
+	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer0, puiTexCoordStride0, nullptr, TINYGLTF_TYPE_VEC2) == false)
+	{
+		return false;
+	}
 
 	//if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_1", kppfTexCoordBuffer1, puiTexCoordStride1, nullptr, TINYGLTF_TYPE_VEC2) == false)
 	//{

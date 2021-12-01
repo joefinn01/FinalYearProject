@@ -14,6 +14,10 @@
 #define STBI_MSC_SECURE_CRT
 // #define TINYGLTF_NOEXCEPTION // optional. disable exception handling.
 
+class Texture;
+class DescriptorHeap;
+class Descriptor;
+
 struct Vertex;
 
 namespace tinygltf
@@ -70,15 +74,27 @@ struct Mesh
 {
 	Mesh()
 	{
+		m_Textures = std::vector<Texture*>();
+
 		m_pVertexBuffer = nullptr;
 		m_pIndexBuffer = nullptr;
 		m_pRootNode = nullptr;
+		m_pIndexDesc = nullptr;
+		m_pVertexDesc = nullptr;
+
+		m_uiNumIndices = 0;
+		m_uiNumVertices = 0;
 	}
+
+	std::vector<Texture*> m_Textures;
 
 	UploadBuffer<Vertex>* m_pVertexBuffer;
 	UploadBuffer<UINT16>* m_pIndexBuffer;
 
-	MeshNode* m_pRootNode = nullptr;
+	Descriptor* m_pIndexDesc;
+	Descriptor* m_pVertexDesc;
+
+	MeshNode* m_pRootNode;
 
 	UINT16 m_uiNumVertices;
 	UINT16 m_uiNumIndices;
@@ -87,10 +103,14 @@ struct Mesh
 class MeshManager : public Singleton<MeshManager>
 {
 public:
-	bool LoadMesh(const std::string& sFilename, const std::string& sName);
+	void CreateDescriptors(DescriptorHeap* pHeap);
+
+	bool LoadMesh(const std::string& sFilename, const std::string& sName, ID3D12GraphicsCommandList* pGraphicsCommandList);
 
 	bool GetMesh(std::string sName, Mesh*& pMesh);
 	bool RemoveMesh(std::string sName);
+
+	UINT GetNumMeshes() const;
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT16>* pIndexBuffer);
@@ -99,6 +119,8 @@ private:
 	bool GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT16* puiIndexCount, const UINT16& kuiVertexStart);
 
 	bool GetAttributeData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::string sAttribName, const float** kppfBuffer, UINT* puiStride, UINT16* puiCount, uint32_t uiType);
+
+	bool LoadTextures(Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList);
 
 	std::unordered_map<std::string, Mesh*> m_Meshes;
 };
