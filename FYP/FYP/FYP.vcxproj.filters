@@ -103,6 +103,12 @@
     <ClCompile Include="Managers\MeshManager.cpp">
       <Filter>Managers</Filter>
     </ClCompile>
+    <ClCompile Include="Commons\Texture.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Managers\TextureManager.cpp">
+      <Filter>Managers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -221,6 +227,12 @@
     </ClInclude>
     <ClInclude Include="Include\tinygltf\tiny_gltf.h">
       <Filter>Include\tinygltf</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\Texture.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Managers\TextureManager.h">
+      <Filter>Managers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

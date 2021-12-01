@@ -164,6 +164,7 @@
     <ClCompile Include="Cameras\Camera.cpp" />
     <ClCompile Include="Cameras\DebugCamera.cpp" />
     <ClCompile Include="Commons\ShaderTable.cpp" />
+    <ClCompile Include="Commons\Texture.cpp" />
     <ClCompile Include="Commons\Timer.cpp" />
     <ClCompile Include="GameObjects\GameObject.cpp" />
     <ClCompile Include="Helpers\DebugHelper.cpp" />
@@ -203,6 +204,7 @@
     <ClCompile Include="Managers\InputManager.cpp" />
     <ClCompile Include="Managers\MeshManager.cpp" />
     <ClCompile Include="Managers\ObjectManager.cpp" />
+    <ClCompile Include="Managers\TextureManager.cpp" />
     <ClCompile Include="Managers\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -212,6 +214,7 @@
     <ClInclude Include="Commons\ShaderRecord.h" />
     <ClInclude Include="Commons\ShaderTable.h" />
     <ClInclude Include="Commons\Singleton.h" />
+    <ClInclude Include="Commons\Texture.h" />
     <ClInclude Include="Commons\Timer.h" />
     <ClInclude Include="Commons\UploadBuffer.h" />
     <ClInclude Include="GameObjects\GameObject.h" />
@@ -266,6 +269,7 @@
     <ClInclude Include="Managers\InputManager.h" />
     <ClInclude Include="Managers\MeshManager.h" />
     <ClInclude Include="Managers\ObjectManager.h" />
+    <ClInclude Include="Managers\TextureManager.h" />
     <ClInclude Include="Managers\WindowManager.h" />
     <ClInclude Include="Shaders\ConstantBuffers.h" />
     <ClInclude Include="Shaders\HlslCompat.h">
