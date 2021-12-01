@@ -89,7 +89,7 @@ class MeshManager : public Singleton<MeshManager>
 public:
 	bool LoadMesh(const std::string& sFilename, const std::string& sName);
 
-	bool GetMesh(std::string sName, Mesh* pMesh);
+	bool GetMesh(std::string sName, Mesh*& pMesh);
 	bool RemoveMesh(std::string sName);
 
 private:

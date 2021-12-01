@@ -241,7 +241,7 @@ bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf
 	return true;
 }
 
-bool MeshManager::GetMesh(std::string sName, Mesh* pMesh)
+bool MeshManager::GetMesh(std::string sName, Mesh*& pMesh)
 {
 	if (m_Meshes.count(sName) == 0)
 	{
