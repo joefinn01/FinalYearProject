@@ -15,6 +15,8 @@
 
 
 class Timer;
+class DescriptorHeap;
+class Descriptor;
 
 struct RayGenerationCB;
 struct Vertex;
@@ -127,16 +129,13 @@ protected:
 
 	void ExecuteCommandList();
 
-	D3D12_CPU_DESCRIPTOR_HANDLE GetSrvUavDescriptorHandleCPU(UINT index);
-	D3D12_GPU_DESCRIPTOR_HANDLE GetSrvUavDescriptorHandleGPU(UINT index);
-
 	ID3D12Resource* GetBackBuffer() const;
 	ID3D12Resource* GetBackBuffer(int iIndex) const;
 	Microsoft::WRL::ComPtr<ID3D12Resource>* GetBackBufferComptr();
 	Microsoft::WRL::ComPtr<ID3D12Resource>* GetBackBufferComptr(int iIndex);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferView() const;
-	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferView(int iIndex) const;
+	D3D12_CPU_DESCRIPTOR_HANDLE GetBackBufferView(UINT uiIndex) const;
 
 	ID3D12CommandAllocator* GetCommandAllocator() const;
 	ID3D12CommandAllocator* GetCommandAllocator(int iIndex) const;
@@ -178,6 +177,10 @@ protected:
 	Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain = nullptr;
 	static const UINT s_kuiSwapChainBufferCount = 2;
 
+	Descriptor* m_pOutputDesc;
+	Descriptor* m_pIndexDesc;
+	Descriptor* m_pVertexDesc;
+
 	UINT m_uiFrameIndex = 0;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
@@ -187,11 +190,8 @@ protected:
 
 	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDxcBlob>> m_Shaders;
 
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_pSrvUavHeap = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_pRTVHeap = nullptr;
-
-	UINT m_uiRtvDescriptorSize;
-	UINT m_uiSrvUavDescriptorSize;
+	DescriptorHeap* m_pSrvUavHeap = nullptr;
+	DescriptorHeap* m_pRTVHeap = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pHitGroupTable;

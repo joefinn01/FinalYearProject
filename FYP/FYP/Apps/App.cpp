@@ -1,6 +1,9 @@
 #include "App.h"
 #include "Commons/Timer.h"
 #include "Commons/ShaderTable.h"
+#include "Commons/DescriptorHeap.h"
+#include "Commons/UAVDescriptor.h"
+#include "Commons/SRVDescriptor.h"
 #include "Shaders/ConstantBuffers.h"
 #include "Shaders/Vertices.h"
 #include "Helpers/DebugHelper.h"
@@ -103,8 +106,6 @@ bool App::Init()
 
 		return false;
 	}
-
-	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf", "Box");
 
 	//Log adapters before initialising anything else so we can get the correct window dimensions and refresh rate
 	LogAdapters();
@@ -252,7 +253,7 @@ void App::OnResize()
 
 	m_uiFrameIndex = 0;
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart());
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(m_pRTVHeap->GetHeap()->GetCPUDescriptorHandleForHeapStart());
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; i++)
 	{
 		hr = m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(GetBackBufferComptr(i)->GetAddressOf()));
@@ -264,25 +265,28 @@ void App::OnResize()
 			return;
 		}
 
+		if (m_pRTVHeap->GetNumDescsAllocated() < s_kuiSwapChainBufferCount)
+		{
+			if (m_pRTVHeap->Allocate() == false)
+			{
+				return;
+			}
+		}
+
 		m_pDevice->CreateRenderTargetView(GetBackBuffer(i), nullptr, rtvHeapHandle);
-		rtvHeapHandle.Offset(1, m_uiRtvDescriptorSize);
+		rtvHeapHandle.Offset(1, m_pRTVHeap->GetDescriptorSize());
 	}
 
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to Create albedo committed resource when resizing screen!");
-
-		return;
-	}
-
+	//Recreate the raytracing output
 	m_pRaytracingOutput.Reset();
 
 	CreateOutputBuffer();
 
-	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	Descriptor* pDescriptor = new UAVDescriptor(m_pOutputDesc->GetDescriptorIndex(), m_pSrvUavHeap->GetCpuDescriptorHandle(m_pOutputDesc->GetDescriptorIndex()), m_pRaytracingOutput.Get(), D3D12_UAV_DIMENSION_TEXTURE2D);
 
-	m_pDevice->CreateUnorderedAccessView(m_pRaytracingOutput.Get(), nullptr, &uavDesc, GetSrvUavDescriptorHandleCPU(GlobalRootSignatureParams::OUTPUT));
+	delete m_pOutputDesc;
+
+	m_pOutputDesc = pDescriptor;
 
 	// Execute the resize commands.
 	hr = m_pGraphicsCommandList->Close();
@@ -323,7 +327,7 @@ void App::Draw()
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
-	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSrvUavHeap.Get() };
+	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSrvUavHeap->GetHeap().Get() };
 	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
 	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
@@ -341,13 +345,13 @@ void App::Draw()
 	
 	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::OUTPUT, GetSrvUavDescriptorHandleGPU(GlobalRootSignatureParams::OUTPUT));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::OUTPUT, m_pSrvUavHeap->GetGpuDescriptorHandle(m_pOutputDesc->GetDescriptorIndex()));
 
 	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_pTopLevelAccelerationStructure->GetGPUVirtualAddress());
 
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, GetSrvUavDescriptorHandleGPU(1));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(m_pIndexDesc->GetDescriptorIndex()));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -788,23 +792,14 @@ bool App::InitDirectX3D()
 		return false;
 	}
 
-	//Create RTV heap
-	D3D12_DESCRIPTOR_HEAP_DESC RTVHeapDesc = {};
-	RTVHeapDesc.NumDescriptors = s_kuiSwapChainBufferCount;
-	RTVHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	RTVHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-	RTVHeapDesc.NodeMask = 0;
+	m_pRTVHeap = new DescriptorHeap();
 
-	hr = m_pDevice->CreateDescriptorHeap(&RTVHeapDesc, IID_PPV_ARGS(m_pRTVHeap.GetAddressOf()));
-
-	if (FAILED(hr))
+	if (m_pRTVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount) == false)
 	{
-		LOG_ERROR(tag, L"Failed to create the RTV heap!");
-
 		return false;
 	}
 
-	m_uiRtvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
 
 	return true;
 }
@@ -962,7 +957,7 @@ bool App::CompileShaders()
 
 void App::CreateGeometry()
 {
-
+	MeshManager::GetInstance()->LoadMesh("Models/Box/gLTF/Box.gltf", "Box");
 
 
 }
@@ -1354,16 +1349,6 @@ void App::ExecuteCommandList()
 	FlushCommandQueue();
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE App::GetSrvUavDescriptorHandleCPU(UINT index)
-{
-	return CD3DX12_CPU_DESCRIPTOR_HANDLE(m_pSrvUavHeap->GetCPUDescriptorHandleForHeapStart(), (UINT)index, m_uiSrvUavDescriptorSize);
-}
-
-D3D12_GPU_DESCRIPTOR_HANDLE App::GetSrvUavDescriptorHandleGPU(UINT index)
-{
-	return CD3DX12_GPU_DESCRIPTOR_HANDLE(m_pSrvUavHeap->GetGPUDescriptorHandleForHeapStart(), (UINT)index, m_uiSrvUavDescriptorSize);
-}
-
 ID3D12Resource* App::GetBackBuffer() const
 {
 	return m_FrameResources[m_uiFrameIndex].m_pRenderTarget.Get();
@@ -1386,12 +1371,12 @@ Microsoft::WRL::ComPtr<ID3D12Resource>* App::GetBackBufferComptr(int iIndex)
 
 D3D12_CPU_DESCRIPTOR_HANDLE App::GetBackBufferView() const
 {
-	return CD3DX12_CPU_DESCRIPTOR_HANDLE(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), m_uiFrameIndex, m_uiRtvDescriptorSize);
+	return m_pRTVHeap->GetCpuDescriptorHandle(m_uiFrameIndex);
 }
 
-D3D12_CPU_DESCRIPTOR_HANDLE App::GetBackBufferView(int iIndex) const
+D3D12_CPU_DESCRIPTOR_HANDLE App::GetBackBufferView(UINT uiIndex) const
 {
-	return CD3DX12_CPU_DESCRIPTOR_HANDLE(m_pRTVHeap->GetCPUDescriptorHandleForHeapStart(), iIndex, m_uiRtvDescriptorSize);
+	return m_pRTVHeap->GetCpuDescriptorHandle(uiIndex);
 }
 
 ID3D12CommandAllocator* App::GetCommandAllocator() const
@@ -1526,57 +1511,41 @@ bool App::CreateGlobalSignature()
 
 void App::PopulateDescriptorHeaps()
 {
-	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-
-	m_pDevice->CreateUnorderedAccessView(m_pRaytracingOutput.Get(), nullptr, &uavDesc, GetSrvUavDescriptorHandleCPU(0));
-
-	//Create Index srv
+	//Create output descriptor
+	UINT uiDescIndex;
+	
+	if (m_pSrvUavHeap->Allocate(uiDescIndex) == false)
 	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumIndices) / 4;
-		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-		srvDesc.Buffer.StructureByteStride = 0;
-
-		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(1));
+		return;
 	}
 
+	m_pOutputDesc = new UAVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), m_pRaytracingOutput.Get(), D3D12_UAV_DIMENSION_TEXTURE2D);
 
-	//Create Vertex srv
+	//Create index descriptor
+	if (m_pSrvUavHeap->Allocate(uiDescIndex) == false)
 	{
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Buffer.NumElements = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumVertices;
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-		srvDesc.Buffer.StructureByteStride = sizeof(Vertex);
-
-		m_pDevice->CreateShaderResourceView(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get(), &srvDesc, GetSrvUavDescriptorHandleCPU(2));
+		return;
 	}
+
+	m_pIndexDesc = new SRVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumIndices) / 4, DXGI_FORMAT_R32_TYPELESS, D3D12_BUFFER_SRV_FLAG_RAW, 0);
+
+	//Create Vertex descriptor
+	if (m_pSrvUavHeap->Allocate(uiDescIndex) == false)
+	{
+		return;
+	}
+
+	m_pVertexDesc = new SRVDescriptor(uiDescIndex, m_pSrvUavHeap->GetCpuDescriptorHandle(uiDescIndex), ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex));
 }
 
 bool App::CreateDescriptorHeaps()
 {
-	D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {};
-	heapDesc.NumDescriptors = 3;
-	heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	heapDesc.NodeMask = 0;
+	m_pSrvUavHeap = new DescriptorHeap();
 
-	HRESULT hr = m_pDevice->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&m_pSrvUavHeap));
-
-	if (FAILED(hr))
+	if (m_pSrvUavHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 3) == false)
 	{
-		LOG_ERROR(tag, L"Failed to create render target descriptor heap!");
-
 		return false;
 	}
-
-	m_uiSrvUavDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 	return true;
 }
