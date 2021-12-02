@@ -329,7 +329,10 @@ void App::Draw()
 		return;
 	}
 
-	CreateTLAS(true);
+	if (CreateTLAS(true) == false)
+	{
+		return;
+	}
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
@@ -988,9 +991,15 @@ bool App::CreateAccelerationStructures()
 		return false;
 	}
 
-	CreateBLAS();
+	if (CreateBLAS() == false)
+	{
+		return false;
+	}
 
-	CreateTLAS(false);
+	if (CreateTLAS(false) == false)
+	{
+		return false;
+	}
 
 	ExecuteCommandList();
 
@@ -1022,8 +1031,19 @@ bool App::CreateBLAS()
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
 	m_pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
 
-	DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_BottomLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-	DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_BottomLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+	if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_BottomLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
+	{
+		LOG_ERROR(tag, L"Failed to create the bottom level acceleration structure scratch buffer!");
+
+		return false;
+	}
+
+	if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_BottomLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
+	{
+		LOG_ERROR(tag, L"Failed to create the bottom level acceleration structure result buffer!");
+
+		return false;
+	}
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
 	buildDesc.Inputs = inputs;
@@ -1034,7 +1054,7 @@ bool App::CreateBLAS()
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_BottomLevelBuffer.m_pResult.Get()));
 
-	return false;
+	return true;
 }
 
 bool App::CreateTLAS(bool bUpdate)
@@ -1054,10 +1074,21 @@ bool App::CreateTLAS(bool bUpdate)
 	}
 	else
 	{
-		 DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_TopLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-		 DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_TopLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
+		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_TopLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
+		{
+			LOG_ERROR(tag, L"Failed to create the top level acceleration structure scratch buffer!");
+
+			return false;
+		}
+
+		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_TopLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
+		{
+			LOG_ERROR(tag, L"Failed to create the top level acceleration structure result buffer!");
+
+			return false;
+		}
 		 
-		 m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), 1, false);
+		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), 1, false);
 	}
 
 	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress(0);
