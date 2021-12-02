@@ -65,7 +65,7 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 		return false;
 	}
 
-	if (LoadTextures(pMesh, model, pGraphicsCommandList) == false)
+	if (LoadTextures(sName, pMesh, model, pGraphicsCommandList) == false)
 	{
 		return false;
 	}
@@ -282,7 +282,7 @@ UINT MeshManager::GetNumMeshes() const
 	return m_Meshes.size();
 }
 
-bool MeshManager::LoadTextures(Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)
+bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)
 {
 	tinygltf::Image image;
 
@@ -292,7 +292,9 @@ bool MeshManager::LoadTextures(Mesh* pMesh, const tinygltf::Model kModel, ID3D12
 
 		Texture* pTexture;
 
-		if (TextureManager::GetInstance()->LoadTexture(image, pTexture, pGraphicsCommandList) == false)
+		std::string sTexName = sName + "Tex" + std::to_string(i);
+
+		if (TextureManager::GetInstance()->LoadTexture(sName, image, pTexture, pGraphicsCommandList) == false)
 		{
 			return false;
 		}

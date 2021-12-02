@@ -16,7 +16,7 @@ namespace tinygltf
 class TextureManager : public Singleton<TextureManager>
 {
 public:
-	bool LoadTexture(const tinygltf::Image& kImage, Texture*& pTexture, ID3D12GraphicsCommandList* pGraphicsCommandList);
+	bool LoadTexture(std::string sName, const tinygltf::Image& kImage, Texture*& pTexture, ID3D12GraphicsCommandList* pGraphicsCommandList);
 
 	bool GetTexture(const std::string& ksName, Texture*& pTexture);
 	bool RemoveTexture(const std::string& ksName);

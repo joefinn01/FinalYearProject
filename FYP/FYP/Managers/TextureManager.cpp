@@ -6,7 +6,7 @@
 
 Tag tag = L"TextureManager";
 
-bool TextureManager::LoadTexture(const tinygltf::Image& kImage, Texture*& pTexture, ID3D12GraphicsCommandList* pGraphicsCommandList)
+bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImage, Texture*& pTexture, ID3D12GraphicsCommandList* pGraphicsCommandList)
 {
 	Texture* pTempTexture = new Texture();
 
