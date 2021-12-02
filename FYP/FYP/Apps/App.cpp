@@ -354,7 +354,6 @@ void App::Draw()
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
 	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexDesc->GetDescriptorIndex()));
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX + 1, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_Textures[0]->GetDescriptor()->GetDescriptorIndex()));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -1155,12 +1154,12 @@ bool App::CreateHitGroupShaderTable()
 	struct HitGroupRootArgs
 	{
 		CubeCB cubeCB;
-		//D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
 	};
 
 	HitGroupRootArgs hitGroupRootArgs;
 	hitGroupRootArgs.cubeCB = m_CubeCB;
-	//hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_Textures[0]->GetDescriptor()->GetDescriptorIndex());
+	hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_Textures[0]->GetDescriptor()->GetDescriptorIndex());
 
 	UINT uiNumShaderRecords = ObjectManager::GetInstance()->GetNumGameObjects();
 
@@ -1499,11 +1498,12 @@ bool App::CreateSignatures()
 
 bool App::CreateLocalSignature()
 {
+	CD3DX12_DESCRIPTOR_RANGE diffuseTable;
+	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
 
-
-	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT - 1] = {};
+	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
 	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(CubeCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
-	//slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
+	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init((UINT)_countof(slotRootParameter), slotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
@@ -1545,15 +1545,11 @@ bool App::CreateGlobalSignature()
 	CD3DX12_DESCRIPTOR_RANGE indexVertexRange;
 	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
 
-	CD3DX12_DESCRIPTOR_RANGE diffuseTable;
-	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
-
-	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT + 1] = {};
+	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
 	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
 	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);	//Reference to TLAS
 	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
 	slotRootParameter[GlobalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
-	slotRootParameter[GlobalRootSignatureParams::VERTEX_INDEX + 1].InitAsDescriptorTable(1, &diffuseTable);	//Reference to vertex and index buffer
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
 
