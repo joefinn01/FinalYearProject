@@ -28,7 +28,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = bary.x * Vertices[indexes[0]].TexCoords0 + bary.y * Vertices[indexes[1]].TexCoords0 + bary.z * Vertices[indexes[2]].TexCoords0;
 
-    float4 texColour = g_LocalDiffuse.SampleLevel(SamPointClamp, uv, 0);
+    float4 texColour = g_LocalDiffuse.SampleLevel(SamPointWrap, uv, 0);
 
     float4 diffuse = CalculateDiffuseLighting(hitPosW, normalW);
 
