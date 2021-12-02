@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Commons/UploadBuffer.h"
+#include "Commons/AccelerationBuffers.h"
 
 #include <vector>
 
@@ -16,9 +17,11 @@ struct Primitive
 		m_uiFirstIndex = 0;
 		m_uiNumIndices = 0;
 		m_uiNumVertices = 0;
+		m_uiFirstVertex = 0;
 	}
 
 	UINT16 m_uiFirstIndex;
+	UINT16 m_uiFirstVertex;
 	UINT16 m_uiNumIndices;
 	UINT16 m_uiNumVertices;
 };
@@ -56,7 +59,8 @@ class Mesh
 public:
 	Mesh();
 
-	bool CreateBLAS();
+	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	AccelerationBuffers* GetBLAS();
 
 	std::vector<Texture*>* GetTextures();
 
@@ -86,6 +90,8 @@ private:
 
 	UINT16 m_uiNumVertices;
 	UINT16 m_uiNumIndices;
+
+	AccelerationBuffers m_BottomLevel;
 
 	friend class MeshManager;
 };

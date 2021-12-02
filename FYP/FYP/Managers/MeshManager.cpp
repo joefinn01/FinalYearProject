@@ -226,6 +226,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 			Primitive* pPrimitive = new Primitive();
 			pPrimitive->m_uiFirstIndex = uiIndexStart;
+			pPrimitive->m_uiFirstVertex = uiVertexStart;
 			pPrimitive->m_uiNumIndices = uiIndexCount;
 			pPrimitive->m_uiNumVertices = uiVertexCount;
 
@@ -281,6 +282,24 @@ bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf
 UINT MeshManager::GetNumMeshes() const
 {
 	return m_Meshes.size();
+}
+
+std::unordered_map<std::string, Mesh*>* MeshManager::GetMeshes()
+{
+	return &m_Meshes;
+}
+
+bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList)
+{
+	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
+	{
+		if (it->second->CreateBLAS(pGraphicsCommandList) == false)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)

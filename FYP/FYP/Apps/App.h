@@ -166,7 +166,7 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> m_pGraphicsCommandList = nullptr;
 
 	AccelerationBuffers m_TopLevelBuffer;
-	AccelerationBuffers m_BottomLevelBuffer;
+	//AccelerationBuffers m_BottomLevelBuffer;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
