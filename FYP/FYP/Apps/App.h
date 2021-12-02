@@ -7,6 +7,7 @@
 #include "Commons/Singleton.h"
 #include "Commons/Timer.h"
 #include "Commons/UploadBuffer.h"
+#include "Commons/AccelerationBuffers.h"
 #include "Cameras/DebugCamera.h"
 #include "Shaders/ConstantBuffers.h"
 
@@ -28,13 +29,6 @@ struct FrameResources
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
 
 	UINT64 m_uiFenceValue = 0;
-};
-
-struct AccelerationBuffers
-{
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScratch;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pResult;
-	UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>* m_pInstanceDesc;
 };
 
 namespace GlobalRootSignatureParams

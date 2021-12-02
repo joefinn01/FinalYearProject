@@ -216,6 +216,7 @@
     <ClInclude Include="Apps\App.h" />
     <ClInclude Include="Cameras\Camera.h" />
     <ClInclude Include="Cameras\DebugCamera.h" />
+    <ClInclude Include="Commons\AccelerationBuffers.h" />
     <ClInclude Include="Commons\Descriptor.h" />
     <ClInclude Include="Commons\DescriptorHeap.h" />
     <ClInclude Include="Commons\Mesh.h" />

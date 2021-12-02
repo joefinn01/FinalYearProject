@@ -264,6 +264,9 @@
     <ClInclude Include="Commons\Mesh.h">
       <Filter>Commons</Filter>
     </ClInclude>
+    <ClInclude Include="Commons\AccelerationBuffers.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
