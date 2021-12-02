@@ -10,9 +10,6 @@ bool TextureManager::LoadTexture(const tinygltf::Image& kImage, Texture*& pTextu
 {
 	Texture* pTempTexture = new Texture();
 
-	unsigned char* pBuffer = nullptr;
-	bool bDeleteBuffer = false;
-
 	switch (kImage.component)
 	{
 	case 1:
@@ -144,9 +141,27 @@ bool TextureManager::LoadTexture(const tinygltf::Image& kImage, Texture*& pTextu
 		return false;
 	}
 
+	//Flip the texture horziontally and vertically so it is oriented correctly
+	int iPixelByteSize = (kImage.bits * kImage.component * 0.125f);
+
+	unsigned char* pBuffer = (unsigned char*)&kImage.image[0];
+	unsigned char* pCopyBuffer = new unsigned char[kImage.width * kImage.height * iPixelByteSize];
+
+	for (int i = 0; i < kImage.height; ++i)
+	{
+		for (int j = 0; j < kImage.width; ++j)
+		{
+			unsigned char* pDestPixel = pCopyBuffer + (i * kImage.width + j) * iPixelByteSize;
+			unsigned char* pSourcePixel = pBuffer + ((kImage.height - i - 1) * kImage.width + (kImage.width - j - 1)) * iPixelByteSize;
+
+			memcpy(pDestPixel, pSourcePixel, iPixelByteSize);
+		}
+	}
+
+	//Copy image to texture
 	D3D12_SUBRESOURCE_DATA data = {};
-	data.pData = (void*)kImage.image.data();
-	data.RowPitch = (LONG_PTR)kImage.width * 4;
+	data.pData = (void*)pCopyBuffer;
+	data.RowPitch = (LONG_PTR)kImage.width * iPixelByteSize;
 	data.SlicePitch = (LONG_PTR)kImage.height;
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
