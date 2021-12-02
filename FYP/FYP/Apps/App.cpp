@@ -968,7 +968,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/BoxTextured/gLTF/BoxTextured.gltf", "Box", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -989,8 +989,8 @@ bool App::CreateAccelerationStructures()
 	geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
 	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetGPUVirtualAddress();
 	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetDesc().Width / sizeof(UINT16);
+	geometryDesc.Triangles.Transform3x4 = ObjectManager::GetInstance()->GetGameObject("Box1")->GetWorldBuffer()->GetBufferGPUAddress(0);
 	geometryDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
-	geometryDesc.Triangles.Transform3x4 = 0;
 	geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
 	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetDesc().Width / sizeof(Vertex);
 	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetGPUVirtualAddress();
@@ -1256,7 +1256,7 @@ void App::InitScene()
 	MeshManager::GetInstance()->GetMesh("Box", pMesh);
 
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Box1", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
+	pGameObject->Init("Box1", XMFLOAT3(0, 0, -5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
 
 	CreateCameras();
 

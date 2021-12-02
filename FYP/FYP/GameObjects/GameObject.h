@@ -65,6 +65,8 @@ public:
 	Mesh* GetMesh() const;
 	void SetMesh(Mesh* pMesh);
 
+	UploadBuffer<DirectX::XMFLOAT3X4>* GetWorldBuffer() const;
+
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
 
@@ -79,6 +81,8 @@ private:
 
 	DirectX::XMFLOAT4 m_Up = DirectX::XMFLOAT4(0, 1, 0, 0);
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
+
+	UploadBuffer<DirectX::XMFLOAT3X4>* m_pWorldUploadBuffer;
 
 	Mesh* m_pMesh = nullptr;
 };

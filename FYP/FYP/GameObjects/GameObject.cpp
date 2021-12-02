@@ -27,6 +27,21 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 	m_pMesh = pMesh;
 
+	m_pWorldUploadBuffer = new UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
+
+	XMFLOAT4X4 world = GetWorldMatrix();
+	XMFLOAT3X4 tempMatrix;
+
+	for (int i = 0; i < 3; ++i)
+	{
+		for (int j = 0; j < 4; ++j)
+		{
+			tempMatrix.m[i][j] = world.m[i][j];
+		}
+	}
+
+	m_pWorldUploadBuffer->CopyData(0, tempMatrix);
+
 	ObjectManager::GetInstance()->AddGameObject(this);
 
 	return true;
@@ -215,6 +230,11 @@ Mesh* GameObject::GetMesh() const
 void GameObject::SetMesh(Mesh* pMesh)
 {
 	m_pMesh = pMesh;
+}
+
+UploadBuffer<DirectX::XMFLOAT3X4>* GameObject::GetWorldBuffer() const
+{
+	return m_pWorldUploadBuffer;
 }
 
 void GameObject::UpdateAxisVectors()
