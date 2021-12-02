@@ -123,11 +123,13 @@ bool TextureManager::LoadTexture(const tinygltf::Image& kImage, Texture*& pTextu
 		return false;
 	}
 
+	UINT64 uiBufferSize = GetRequiredIntermediateSize(pTempTexture->GetTexture().Get(), 0, 1);
+
 	hr = App::GetApp()->GetDevice()->CreateCommittedResource
 	(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(GetRequiredIntermediateSize(pTempTexture->GetTexture().Get(), 0, 1)),
+		&CD3DX12_RESOURCE_DESC::Buffer(uiBufferSize),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		IID_PPV_ARGS(pTempTexture->GetUploadPtr()->GetAddressOf())
@@ -144,12 +146,12 @@ bool TextureManager::LoadTexture(const tinygltf::Image& kImage, Texture*& pTextu
 
 	D3D12_SUBRESOURCE_DATA data = {};
 	data.pData = (void*)kImage.image.data();
-	data.RowPitch = 0;
-	data.SlicePitch = 0;
+	data.RowPitch = (LONG_PTR)kImage.width * 4;
+	data.SlicePitch = (LONG_PTR)kImage.height;
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
-	UpdateSubresources(pGraphicsCommandList, pTempTexture->GetTexture().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
+	UINT64 test = UpdateSubresources(pGraphicsCommandList, pTempTexture->GetTexture().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
