@@ -230,7 +230,7 @@ void App::Update(const Timer& kTimer)
 
 	UpdatePerFrameCB(m_uiFrameIndex);
 
-	ObjectManager::GetInstance()->GetGameObject("Box1")->Update(kTimer);
+	ObjectManager::GetInstance()->Update(kTimer);
 }
 
 void App::OnResize()
@@ -1301,6 +1301,9 @@ void App::InitScene()
 
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Box1", XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
+
+	pGameObject = new GameObject();
+	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
 
 	CreateCameras();
 

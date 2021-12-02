@@ -36,6 +36,8 @@ public:
 
 	Camera* GetCamera(const std::string& ksName) const;
 
+	void Update(const Timer& kTimer);
+
 protected:
 
 private:
