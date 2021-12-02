@@ -27,8 +27,14 @@ struct FrameResources
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
 
-
 	UINT64 m_uiFenceValue = 0;
+};
+
+struct AccelerationBuffers
+{
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScratch;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pResult;
+	UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>* m_pInstanceDesc;
 };
 
 namespace GlobalRootSignatureParams
@@ -99,7 +105,7 @@ protected:
 
 	bool CreateAccelerationStructures();
 	bool CreateBLAS();
-	bool CreateTLAS();
+	bool CreateTLAS(bool bUpdate);
 
 	bool CreateShaderTables();
 	bool CreateRayGenShaderTable();
@@ -165,10 +171,8 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Device5> m_pDevice = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> m_pGraphicsCommandList = nullptr;
 
-	// Acceleration structure
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pAccelerationStructure;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pBottomLevelAccelerationStructure;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pTopLevelAccelerationStructure;
+	AccelerationBuffers m_TopLevelBuffer;
+	AccelerationBuffers m_BottomLevelBuffer;
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
