@@ -120,13 +120,11 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 		return false;
 	}
 
-	UINT64 uiBufferSize = GetRequiredIntermediateSize(pTempTexture->GetTexture().Get(), 0, 1);
-
 	hr = App::GetApp()->GetDevice()->CreateCommittedResource
 	(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(uiBufferSize),
+		&CD3DX12_RESOURCE_DESC::Buffer(GetRequiredIntermediateSize(pTempTexture->GetTexture().Get(), 0, 1)),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		IID_PPV_ARGS(pTempTexture->GetUploadPtr()->GetAddressOf())
@@ -141,27 +139,10 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 		return false;
 	}
 
-	//Flip the texture horziontally and vertically so it is oriented correctly
-	int iPixelByteSize = (kImage.bits * kImage.component * 0.125f);
-
-	unsigned char* pBuffer = (unsigned char*)&kImage.image[0];
-	unsigned char* pCopyBuffer = new unsigned char[kImage.width * kImage.height * iPixelByteSize];
-
-	for (int i = 0; i < kImage.height; ++i)
-	{
-		for (int j = 0; j < kImage.width; ++j)
-		{
-			unsigned char* pDestPixel = pCopyBuffer + (i * kImage.width + j) * iPixelByteSize;
-			unsigned char* pSourcePixel = pBuffer + ((kImage.height - i - 1) * kImage.width + (kImage.width - j - 1)) * iPixelByteSize;
-
-			memcpy(pDestPixel, pSourcePixel, iPixelByteSize);
-		}
-	}
-
 	//Copy image to texture
 	D3D12_SUBRESOURCE_DATA data = {};
-	data.pData = (void*)pCopyBuffer;
-	data.RowPitch = (LONG_PTR)kImage.width * iPixelByteSize;
+	data.pData = (void*)kImage.image.data();
+	data.RowPitch = (LONG_PTR)kImage.width * (kImage.bits * kImage.component * 0.125f);
 	data.SlicePitch = (LONG_PTR)kImage.height;
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
