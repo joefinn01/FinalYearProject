@@ -6,6 +6,7 @@
 #include "Commons/DescriptorHeap.h"
 #include "Commons/Texture.h"
 #include "Commons/SRVDescriptor.h"
+#include "Commons/Mesh.h"
 #include "Managers/TextureManager.h"
 
 Tag tag = L"MeshManager";

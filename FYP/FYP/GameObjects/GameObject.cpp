@@ -2,6 +2,7 @@
 #include "Managers/ObjectManager.h"
 #include "Shaders/Vertices.h"
 #include "Apps/App.h"
+#include "Commons/Mesh.h"
 
 using namespace DirectX;
 

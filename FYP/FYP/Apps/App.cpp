@@ -5,6 +5,7 @@
 #include "Commons/UAVDescriptor.h"
 #include "Commons/SRVDescriptor.h"
 #include "Commons/Texture.h"
+#include "Commons/Mesh.h"
 #include "Shaders/ConstantBuffers.h"
 #include "Shaders/Vertices.h"
 #include "Helpers/DebugHelper.h"
@@ -360,7 +361,7 @@ void App::Draw()
 
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexDesc->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetIndexDesc()->GetDescriptorIndex()));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -1011,13 +1012,13 @@ bool App::CreateBLAS()
 	//Create geometry description
 	D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {};
 	geometryDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetGPUVirtualAddress();
-	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pIndexBuffer->Get()->GetDesc().Width / sizeof(UINT16);
+	geometryDesc.Triangles.IndexBuffer = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetIndexUploadBuffer()->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.IndexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetIndexUploadBuffer()->Get()->GetDesc().Width / sizeof(UINT16);
 	geometryDesc.Triangles.Transform3x4 = 0;
 	geometryDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
 	geometryDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetDesc().Width / sizeof(Vertex);
-	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_pVertexBuffer->Get()->GetGPUVirtualAddress();
+	geometryDesc.Triangles.VertexCount = (UINT)ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetVertexUploadBuffer()->Get()->GetDesc().Width / sizeof(Vertex);
+	geometryDesc.Triangles.VertexBuffer.StartAddress = ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetVertexUploadBuffer()->Get()->GetGPUVirtualAddress();
 	geometryDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(Vertex);
 	geometryDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
 
@@ -1203,7 +1204,7 @@ bool App::CreateHitGroupShaderTable()
 
 	HitGroupRootArgs hitGroupRootArgs;
 	hitGroupRootArgs.cubeCB = m_CubeCB;
-	hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->m_Textures[0]->GetDescriptor()->GetDescriptorIndex());
+	hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
 
 	UINT uiNumShaderRecords = ObjectManager::GetInstance()->GetNumGameObjects();
 

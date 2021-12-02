@@ -165,6 +165,7 @@
     <ClCompile Include="Cameras\DebugCamera.cpp" />
     <ClCompile Include="Commons\Descriptor.cpp" />
     <ClCompile Include="Commons\DescriptorHeap.cpp" />
+    <ClCompile Include="Commons\Mesh.cpp" />
     <ClCompile Include="Commons\ShaderTable.cpp" />
     <ClCompile Include="Commons\SRVDescriptor.cpp" />
     <ClCompile Include="Commons\Texture.cpp" />
@@ -217,6 +218,7 @@
     <ClInclude Include="Cameras\DebugCamera.h" />
     <ClInclude Include="Commons\Descriptor.h" />
     <ClInclude Include="Commons\DescriptorHeap.h" />
+    <ClInclude Include="Commons\Mesh.h" />
     <ClInclude Include="Commons\ShaderRecord.h" />
     <ClInclude Include="Commons\ShaderTable.h" />
     <ClInclude Include="Commons\Singleton.h" />

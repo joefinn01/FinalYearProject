@@ -121,6 +121,9 @@
     <ClCompile Include="Commons\SRVDescriptor.cpp">
       <Filter>Commons</Filter>
     </ClCompile>
+    <ClCompile Include="Commons\Mesh.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -256,6 +259,9 @@
       <Filter>Commons</Filter>
     </ClInclude>
     <ClInclude Include="Commons\SRVDescriptor.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\Mesh.h">
       <Filter>Commons</Filter>
     </ClInclude>
   </ItemGroup>
