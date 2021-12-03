@@ -200,7 +200,6 @@ protected:
 	UINT m_uiRayGenRecordSize;
 
 	UploadBuffer<ScenePerFrameCB>* m_pPerFrameCBUpload = nullptr;
-	CubeCB m_CubeCB;
 
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
 

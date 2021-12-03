@@ -14,7 +14,7 @@ GameObject::~GameObject()
 {
 }
 
-bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh)
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, GameObjectCB cb)
 {
 	m_sName = sName;
 
@@ -27,6 +27,8 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 	m_eType = GameObjectType::BASE;
 
 	m_pMesh = pMesh;
+
+	m_CB = cb;
 
 	ObjectManager::GetInstance()->AddGameObject(this);
 
@@ -233,6 +235,11 @@ XMFLOAT3X4 GameObject::Get3X4WorldMatrix()
 	}
 
 	return matrix;
+}
+
+GameObjectCB GameObject::GetCB() const
+{
+	return m_CB;
 }
 
 void GameObject::UpdateAxisVectors()

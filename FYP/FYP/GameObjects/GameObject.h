@@ -2,6 +2,7 @@
 
 #include "Helpers/MathHelper.h"
 #include "Commons/UploadBuffer.h"
+#include "Shaders/ConstantBuffers.h"
 
 #include <string>
 
@@ -9,6 +10,7 @@ class Timer;
 
 struct Vertex;
 struct Mesh;
+struct GameObjectCB;
 
 enum class GameObjectType
 {
@@ -23,7 +25,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, GameObjectCB cb);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -67,8 +69,12 @@ public:
 
 	DirectX::XMFLOAT3X4 Get3X4WorldMatrix();
 
+	GameObjectCB GetCB() const;
+
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
+
+	GameObjectCB m_CB;
 
 private:
 	void UpdateAxisVectors();

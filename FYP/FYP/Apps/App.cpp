@@ -1062,8 +1062,8 @@ bool App::CreateTLAS(bool bUpdate)
 		instanceDesc.InstanceMask = 1;
 		instanceDesc.AccelerationStructure = it->second->GetMesh()->GetBLAS()->m_pResult->GetGPUVirtualAddress();
 		instanceDesc.Flags = 0;
-		instanceDesc.InstanceID = 0;
-		instanceDesc.InstanceContributionToHitGroupIndex = 0;
+		instanceDesc.InstanceID = iCount;
+		instanceDesc.InstanceContributionToHitGroupIndex = iCount;
 		instanceDesc.InstanceMask = 0xFF;
 
 		m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
@@ -1154,20 +1154,21 @@ bool App::CreateHitGroupShaderTable()
 
 	struct HitGroupRootArgs
 	{
-		CubeCB cubeCB;
+		GameObjectCB gameObjectCB;
 		D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
 	};
 
 	HitGroupRootArgs hitGroupRootArgs;
-	hitGroupRootArgs.cubeCB = m_CubeCB;
-	hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
 
-	UINT uiNumShaderRecords = ObjectManager::GetInstance()->GetNumGameObjects();
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), ObjectManager::GetInstance()->GetNumGameObjects(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), uiNumShaderRecords, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
-	for (UINT i = 0; i < ObjectManager::GetInstance()->GetNumGameObjects(); ++i)
+	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
+		hitGroupRootArgs.gameObjectCB = it->second->GetCB();
+		hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
+
 		if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 		{
 			LOG_ERROR(tag, L"Failed to add a hit group shader record!");
@@ -1256,11 +1257,16 @@ void App::InitScene()
 	Mesh* pMesh = nullptr;
 	MeshManager::GetInstance()->GetMesh("Box", pMesh);
 
+	GameObjectCB cb;
+	cb.Albedo = XMFLOAT4(1, 0, 0, 1);
+
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Box1", XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
+	pGameObject->Init("Box1", XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
+
+	cb.Albedo = XMFLOAT4(0, 1, 0, 1);
 
 	pGameObject = new GameObject();
-	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
+	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
 
 	CreateCameras();
 
@@ -1277,8 +1283,6 @@ void App::InitConstantBuffers()
 
 		UpdatePerFrameCB(i);
 	}
-
-	m_CubeCB.Albedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 void App::UpdatePerFrameCB(UINT uiFrameIndex)
@@ -1506,7 +1510,7 @@ bool App::CreateLocalSignature()
 	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
-	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(CubeCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
+	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(GameObjectCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
 	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
