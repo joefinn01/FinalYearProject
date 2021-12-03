@@ -1268,6 +1268,11 @@ void App::InitScene()
 	pGameObject = new GameObject();
 	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
 
+	cb.Albedo = XMFLOAT4(0, 0, 1, 1);
+
+	pGameObject = new GameObject();
+	pGameObject->Init("Box3", XMFLOAT3(-5, 0, 5), XMFLOAT3(0, 20, 0), XMFLOAT3(2, 2, 2), pMesh, cb);
+
 	CreateCameras();
 
 	InitConstantBuffers();
