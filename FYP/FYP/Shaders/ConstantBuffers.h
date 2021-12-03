@@ -19,7 +19,7 @@ struct ScenePerFrameCB
 	XMVECTOR LightDiffuseColor;
 };
 
-struct CubeCB
+struct GameObjectCB
 {
 	XMFLOAT4 Albedo;
 };
