@@ -37,7 +37,7 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 void GameObject::Update(const Timer& kTimer)
 {
-	Rotate(20.0f * kTimer.DeltaTime(), 0, 0);
+	Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
 }
 
 void GameObject::Destroy()
