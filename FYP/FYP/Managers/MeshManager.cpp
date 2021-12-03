@@ -208,11 +208,18 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			for (UINT j = 0; j < uiVertexCount; ++j)
 			{
 				vertex.Position = XMFLOAT3(kpfPositionBuffer[j * uiPositionStride], kpfPositionBuffer[(j * uiPositionStride) + 1], kpfPositionBuffer[(j * uiPositionStride) + 2]);
-				vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
+
+				if (kpfTexCoordBuffer0 != nullptr)
+				{
+					vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
+				}
 
 				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[j * uiTexCoordStride1], kpfTexCoordBuffer1[(j * uiTexCoordStride1) + 1]);
 
-				XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
+				if (kpfNormalBuffer != nullptr)
+				{
+					XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
+				}
 
 				pVertexBuffer->push_back(vertex);
 			}
@@ -222,6 +229,15 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 				if (GetIndexData(kModel, kPrimitive, pIndexBuffer, &uiIndexCount, uiVertexStart) == false)
 				{
 					return false;
+				}
+			}
+			else //If no index buffer then create them
+			{
+				uiIndexCount = pVertexBuffer->size();
+
+				for (int i = 0; i < uiIndexCount; ++i)
+				{
+					pIndexBuffer->push_back(i + uiVertexStart);
 				}
 			}
 
@@ -315,7 +331,7 @@ bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::M
 
 		std::string sTexName = sName + "Tex" + std::to_string(i);
 
-		if (TextureManager::GetInstance()->LoadTexture(sName, image, pTexture, pGraphicsCommandList) == false)
+		if (TextureManager::GetInstance()->LoadTexture(sTexName, image, pTexture, pGraphicsCommandList) == false)
 		{
 			return false;
 		}
@@ -363,12 +379,12 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 
 	if (GetAttributeData(kModel, kPrimitive, "NORMAL", kppfNormalBuffer, puiNormalStride, nullptr, TINYGLTF_TYPE_VEC3) == false)
 	{
-		return false;
+		//return false;
 	}
 
 	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer0, puiTexCoordStride0, nullptr, TINYGLTF_TYPE_VEC2) == false)
 	{
-		return false;
+		//return false;
 	}
 
 	//if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_1", kppfTexCoordBuffer1, puiTexCoordStride1, nullptr, TINYGLTF_TYPE_VEC2) == false)

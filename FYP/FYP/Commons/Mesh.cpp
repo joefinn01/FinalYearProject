@@ -39,6 +39,17 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 
 		meshNodes.erase(meshNodes.begin());
 
+		//Push child mesh nodes into vector
+		for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
+		{
+			meshNodes.push_back(pNode->m_ChildNodes[i]);
+		}
+
+		if (pNode->m_Primitives.size() == 0)
+		{
+			continue;
+		}
+
 		UploadBuffer<XMFLOAT3X4>* uploadBuffer = new UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
 
 		XMFLOAT3X4 world3X4;
@@ -48,6 +59,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 			for (int j = 0; j < 4; ++j)
 			{
 				world3X4.m[i][j] = pNode->m_Transform.m[i][j];
+				//world3X4.m[i][j] = MathHelper::Identity().m[i][j];
 			}
 		}
 
@@ -74,13 +86,26 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 
 			geometryDescs.push_back(geomDesc);
 		}
-
-		//Push child mesh nodes into vector
-		for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
-		{
-			meshNodes.push_back(pNode->m_ChildNodes[i]);
-		}
 	}
+
+	//D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+	//geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+	//geomDesc.Triangles.IndexBuffer = m_pIndexBuffer->GetBufferGPUAddress(0);
+	//geomDesc.Triangles.IndexCount = m_uiNumIndices;
+	//geomDesc.Triangles.Transform3x4 = 0;
+	//geomDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
+	//geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+	//geomDesc.Triangles.VertexCount = m_uiNumVertices;
+	//geomDesc.Triangles.VertexBuffer.StartAddress = m_pVertexBuffer->GetBufferGPUAddress(0);
+	//geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(Vertex);
+	//geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+
+	//D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	//inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	//inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+	//inputs.NumDescs = 1;
+	//inputs.pGeometryDescs = &geomDesc;
+	//inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;

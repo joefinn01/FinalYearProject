@@ -330,10 +330,10 @@ void App::Draw()
 		return;
 	}
 
-	if (CreateTLAS(true) == false)
-	{
-		return;
-	}
+	//if (CreateTLAS(true) == false)
+	//{
+	//	return;
+	//}
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
@@ -976,6 +976,7 @@ void App::CreateGeometry()
 
 	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/CesiumMilkTruck/gLTF/CesiumMilkTruck.gltf", "Duck", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/Fox/gLTF/Fox.gltf", "Duck", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1286,7 +1287,7 @@ void App::InitScene()
 	MeshManager::GetInstance()->GetMesh("Duck", pMesh);
 
 	pGameObject = new GameObject();
-	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1000000, 1000000, 1000000), pMesh, cb);
+	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(0.5f, 0.5f, 0.5f), pMesh, cb);
 
 	CreateCameras();
 
