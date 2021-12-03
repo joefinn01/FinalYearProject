@@ -209,6 +209,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			{
 				vertex.Position = XMFLOAT3(kpfPositionBuffer[j * uiPositionStride], kpfPositionBuffer[(j * uiPositionStride) + 1], kpfPositionBuffer[(j * uiPositionStride) + 2]);
 				vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
+
 				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[j * uiTexCoordStride1], kpfTexCoordBuffer1[(j * uiTexCoordStride1) + 1]);
 
 				XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
@@ -289,11 +290,11 @@ std::unordered_map<std::string, Mesh*>* MeshManager::GetMeshes()
 	return &m_Meshes;
 }
 
-bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList)
+bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>>& uploadBuffers)
 {
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{
-		if (it->second->CreateBLAS(pGraphicsCommandList) == false)
+		if (it->second->CreateBLAS(pGraphicsCommandList, uploadBuffers) == false)
 		{
 			return false;
 		}

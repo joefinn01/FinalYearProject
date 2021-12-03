@@ -59,7 +59,7 @@ class Mesh
 public:
 	Mesh();
 
-	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>>& uploadBuffers);
 	AccelerationBuffers* GetBLAS();
 
 	std::vector<Texture*>* GetTextures();
