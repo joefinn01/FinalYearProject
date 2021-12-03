@@ -16,7 +16,7 @@ ByteAddressBuffer Indices : register(t1, space0);
 StructuredBuffer<Vertex> Vertices : register(t2, space0);
 
 ConstantBuffer<ScenePerFrameCB> g_ScenePerFrameCB : register(b0);
-ConstantBuffer<CubeCB> g_CubeCB : register(b1);
+ConstantBuffer<GameObjectCB> g_GameObjectCB : register(b1);
 
 Texture2D<float4> g_LocalDiffuse : register(t3);
 
@@ -91,5 +91,5 @@ float4 CalculateDiffuseLighting(float3 posW, float3 normalW)
 {
     float3 toLight = normalize(g_ScenePerFrameCB.LightPosW.xyz - posW);
     
-    return g_CubeCB.Albedo * g_ScenePerFrameCB.LightDiffuseColor * max(0.0f, dot(toLight, normalW));
+    return g_GameObjectCB.Albedo * g_ScenePerFrameCB.LightDiffuseColor * max(0.0f, dot(toLight, normalW));
 }
