@@ -44,7 +44,7 @@ public:
 
 	std::unordered_map<std::string, Mesh*>* GetMeshes();
 
-	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>>& uploadBuffers);
+	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers);
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT16>* pIndexBuffer);

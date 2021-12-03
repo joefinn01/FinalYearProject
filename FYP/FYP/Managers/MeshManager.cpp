@@ -290,7 +290,7 @@ std::unordered_map<std::string, Mesh*>* MeshManager::GetMeshes()
 	return &m_Meshes;
 }
 
-bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>>& uploadBuffers)
+bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers)
 {
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{

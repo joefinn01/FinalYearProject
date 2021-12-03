@@ -20,7 +20,7 @@ Mesh::Mesh()
 	m_uiNumVertices = 0;
 }
 
-bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>>& uploadBuffers)
+bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers)
 {
 	ID3D12Device5* pDevice = (ID3D12Device5*)App::GetApp()->GetDevice();
 
@@ -39,7 +39,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 
 		meshNodes.erase(meshNodes.begin());
 
-		UploadBuffer<XMFLOAT3X4> uploadBuffer = UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
+		UploadBuffer<XMFLOAT3X4>* uploadBuffer = new UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
 
 		XMFLOAT3X4 world3X4;
 
@@ -51,7 +51,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 			}
 		}
 
-		uploadBuffer.CopyData(0, world3X4);
+		uploadBuffer->CopyData(0, world3X4);
 
 		uploadBuffers.push_back(uploadBuffer);
 
@@ -64,7 +64,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 			geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
 			geomDesc.Triangles.IndexBuffer = m_pIndexBuffer->GetBufferGPUAddress(pPrimitive->m_uiFirstIndex);
 			geomDesc.Triangles.IndexCount = pPrimitive->m_uiNumIndices;
-			geomDesc.Triangles.Transform3x4 = uploadBuffer.GetBufferGPUAddress(0);
+			geomDesc.Triangles.Transform3x4 = uploadBuffer->GetBufferGPUAddress(0);
 			geomDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
 			geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
 			geomDesc.Triangles.VertexCount = pPrimitive->m_uiNumVertices;
