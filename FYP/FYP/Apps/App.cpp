@@ -361,8 +361,6 @@ void App::Draw()
 
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(GlobalRootSignatureParams::VERTEX_INDEX, m_pSrvUavHeap->GetGpuDescriptorHandle(ObjectManager::GetInstance()->GetGameObject("Box1")->GetMesh()->GetIndexDesc()->GetDescriptorIndex()));
-
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
 	m_pGraphicsCommandList->DispatchRays(&dispatchDesc);
@@ -977,6 +975,7 @@ void App::CreateGeometry()
 	}
 
 	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Duck/gLTF/Duck.gltf", "Duck", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -992,7 +991,9 @@ bool App::CreateAccelerationStructures()
 		return false;
 	}
 
-	if (MeshManager::GetInstance()->CreateBLAS(m_pGraphicsCommandList.Get()) == false)
+	std::vector<UploadBuffer<XMFLOAT3X4>*> uploadBuffers;
+
+	if (MeshManager::GetInstance()->CreateBLAS(m_pGraphicsCommandList.Get(), uploadBuffers) == false)
 	{
 		return false;
 	}
@@ -1003,6 +1004,11 @@ bool App::CreateAccelerationStructures()
 	}
 
 	ExecuteCommandList();
+
+	for (int i = 0; i < uploadBuffers.size(); ++i)
+	{
+		delete uploadBuffers[i];
+	}
 
 	return true;
 }
@@ -1156,6 +1162,7 @@ bool App::CreateHitGroupShaderTable()
 	{
 		GameObjectCB gameObjectCB;
 		D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE indexDesc;
 	};
 
 	HitGroupRootArgs hitGroupRootArgs;
@@ -1167,7 +1174,13 @@ bool App::CreateHitGroupShaderTable()
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
 		hitGroupRootArgs.gameObjectCB = it->second->GetCB();
-		hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
+
+		hitGroupRootArgs.indexDesc = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetIndexDesc()->GetDescriptorIndex());
+
+		if (it->second->GetMesh()->GetTextures()->size() != 0)
+		{
+			hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
+		}
 
 		if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 		{
@@ -1263,15 +1276,17 @@ void App::InitScene()
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Box1", XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
 
-	cb.Albedo = XMFLOAT4(0, 1, 0, 1);
-
-	pGameObject = new GameObject();
-	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
-
 	cb.Albedo = XMFLOAT4(0, 0, 1, 1);
 
 	pGameObject = new GameObject();
 	pGameObject->Init("Box3", XMFLOAT3(-5, 0, 5), XMFLOAT3(0, 20, 0), XMFLOAT3(2, 2, 2), pMesh, cb);
+
+	cb.Albedo = XMFLOAT4(0, 1, 0, 1);
+
+	MeshManager::GetInstance()->GetMesh("Duck", pMesh);
+
+	pGameObject = new GameObject();
+	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
 
 	CreateCameras();
 
@@ -1511,12 +1526,16 @@ bool App::CreateSignatures()
 
 bool App::CreateLocalSignature()
 {
+	CD3DX12_DESCRIPTOR_RANGE indexVertexRange;
+	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
+
 	CD3DX12_DESCRIPTOR_RANGE diffuseTable;
 	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
 	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(GameObjectCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
 	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
+	slotRootParameter[LocalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 	rootSignatureDesc.Init((UINT)_countof(slotRootParameter), slotRootParameter, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
@@ -1555,14 +1574,10 @@ bool App::CreateGlobalSignature()
 	CD3DX12_DESCRIPTOR_RANGE accelRange;
 	accelRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
-	CD3DX12_DESCRIPTOR_RANGE indexVertexRange;
-	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
-
 	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
 	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
 	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);	//Reference to TLAS
 	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
-	slotRootParameter[GlobalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
 

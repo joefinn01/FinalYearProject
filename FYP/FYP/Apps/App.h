@@ -38,7 +38,6 @@ namespace GlobalRootSignatureParams
 		OUTPUT = 0,
 		ACCELERATION_STRUCTURE,
 		PER_FRAME_SCENE_CB,
-		VERTEX_INDEX,
 		COUNT
 	};
 }
@@ -48,6 +47,7 @@ namespace LocalRootSignatureParams {
 	{
 		CUBE_CONSTANTS = 0,
 		DIFFUSE_TEX,
+		VERTEX_INDEX,
 		COUNT
 	};
 }
