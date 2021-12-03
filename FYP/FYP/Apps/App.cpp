@@ -975,7 +975,7 @@ void App::CreateGeometry()
 	}
 
 	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/Duck/gLTF/Duck.gltf", "Duck", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/CesiumMilkTruck/gLTF/CesiumMilkTruck.gltf", "Duck", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1279,14 +1279,14 @@ void App::InitScene()
 	cb.Albedo = XMFLOAT4(0, 0, 1, 1);
 
 	pGameObject = new GameObject();
-	pGameObject->Init("Box3", XMFLOAT3(-5, 0, 5), XMFLOAT3(0, 20, 0), XMFLOAT3(2, 2, 2), pMesh, cb);
+	pGameObject->Init("Box3", XMFLOAT3(-5, 0, 5), XMFLOAT3(0, 20, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
 
 	cb.Albedo = XMFLOAT4(0, 1, 0, 1);
 
 	MeshManager::GetInstance()->GetMesh("Duck", pMesh);
 
 	pGameObject = new GameObject();
-	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
+	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1000000, 1000000, 1000000), pMesh, cb);
 
 	CreateCameras();
 
