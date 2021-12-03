@@ -35,10 +35,10 @@ struct MeshNode
 		m_Primitives = std::vector<Primitive*>();
 		m_uiIndex = 0;
 		m_sName = "";
-		m_Transform = DirectX::XMFLOAT4X4();
+		m_Transform = MathHelper::Identity();
 		m_Translation = DirectX::XMFLOAT3();
 		m_Rotation = DirectX::XMFLOAT4();
-		m_Scale = DirectX::XMFLOAT3();
+		m_Scale = DirectX::XMFLOAT3(1, 1, 1);
 	}
 
 	MeshNode* m_pParent;
