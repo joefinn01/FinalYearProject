@@ -156,7 +156,7 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 		pTexture = pTempTexture;
 	}
 
-	m_Textures["test"] = pTempTexture;
+	m_Textures[sName] = pTempTexture;
 
 	return true;
 }
