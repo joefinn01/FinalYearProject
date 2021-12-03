@@ -89,8 +89,8 @@ public:
 		m_pMappedData = nullptr;
 	}
 
-	UploadBuffer(const UploadBuffer& rhs) = delete;
-	UploadBuffer& operator=(const UploadBuffer& rhs) = delete;
+	UploadBuffer(const UploadBuffer& rhs) = default;
+	UploadBuffer& operator=(const UploadBuffer& rhs) = default;
 
 	ID3D12Resource* Get() const
 	{
