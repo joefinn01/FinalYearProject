@@ -70,10 +70,11 @@ public:
 	Descriptor* GetVertexDesc();
 	Descriptor* GetIndexDesc();
 
-	MeshNode* GetRootNode();
+	std::vector<MeshNode*>* GetRootNodes();
 
 	UINT16 GetNumVertices() const;
 	UINT16 GetNumIndices() const;
+	UINT16 GetNumNodes() const;
 
 protected:
 
@@ -86,10 +87,11 @@ private:
 	Descriptor* m_pIndexDesc;
 	Descriptor* m_pVertexDesc;
 
-	MeshNode* m_pRootNode;
+	std::vector<MeshNode*> m_RootNodes;
 
 	UINT16 m_uiNumVertices;
 	UINT16 m_uiNumIndices;
+	UINT16 m_uiNumNodes;
 
 	AccelerationBuffers m_BottomLevel;
 

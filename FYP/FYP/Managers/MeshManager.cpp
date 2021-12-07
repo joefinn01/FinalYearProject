@@ -82,12 +82,14 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 		pScene = &model.scenes[0];
 	}
 
+	pMesh->m_uiNumNodes = pScene->nodes.size();
+
 	std::vector<Vertex> vertexBuffer = std::vector<Vertex>();
 	std::vector<UINT16> indexBuffer = std::vector<UINT16>();
 
-	for (UINT i = 0; i < pScene->nodes.size(); ++i)
+	for (UINT i = 0; i < pMesh->m_uiNumNodes; ++i)
 	{
-		if (ProcessNode(nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, pMesh, &vertexBuffer, &indexBuffer) == false)
+		if (ProcessNode (nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, pMesh, &vertexBuffer, &indexBuffer) == false)
 		{
 			return false;
 		}
@@ -164,6 +166,10 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			kNode.matrix[8], kNode.matrix[9], kNode.matrix[10], kNode.matrix[11],
 			kNode.matrix[12], kNode.matrix[13], kNode.matrix[14], kNode.matrix[15]
 		);
+	}
+	else
+	{
+		XMStoreFloat4x4(&pNode->m_Transform, XMMatrixScalingFromVector(XMLoadFloat3(&scale)) * XMMatrixRotationQuaternion(XMQuaternionNormalize(XMLoadFloat4(&rotation))) * XMMatrixTranslationFromVector(XMLoadFloat3(&translation)));
 	}
 
 	for (UINT i = 0; i < kNode.children.size(); ++i)
@@ -257,7 +263,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 	}
 	else
 	{
-		pMesh->m_pRootNode = pNode;
+		pMesh->m_RootNodes.push_back(pNode);
 	}
 
 	return true;
@@ -423,7 +429,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back((UINT16)(pUINTData[i]) + kuiVertexStart);
+			pIndexBuffer->push_back((UINT16)(pUINTData[i]));
 		}
 	}
 	break;
@@ -434,7 +440,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back(pUINTData[i] + kuiVertexStart);
+			pIndexBuffer->push_back(pUINTData[i]);
 		}
 	}
 	break;
@@ -445,7 +451,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back((UINT16)pUINTData[i] + kuiVertexStart);
+			pIndexBuffer->push_back((UINT16)pUINTData[i]);
 		}
 	}
 	break;

@@ -147,7 +147,7 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
-	UINT64 test = UpdateSubresources(pGraphicsCommandList, pTempTexture->GetTexture().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
+	UpdateSubresources(pGraphicsCommandList, pTempTexture->GetTexture().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
 
 	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 

@@ -330,10 +330,10 @@ void App::Draw()
 		return;
 	}
 
-	//if (CreateTLAS(true) == false)
-	//{
-	//	return;
-	//}
+	if (CreateTLAS(true) == false)
+	{
+		return;
+	}
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
 
@@ -974,6 +974,7 @@ void App::CreateGeometry()
 		return;
 	}
 
+	//MeshManager::GetInstance()->LoadMesh("Models/simpleMesh/gLTF/simpleMesh.gltf", "Duck", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/CesiumMilkTruck/gLTF/CesiumMilkTruck.gltf", "Duck", m_pGraphicsCommandList.Get());
 	//MeshManager::GetInstance()->LoadMesh("Models/Fox/gLTF/Fox.gltf", "Duck", m_pGraphicsCommandList.Get());
@@ -1571,9 +1572,6 @@ bool App::CreateGlobalSignature()
 {
 	CD3DX12_DESCRIPTOR_RANGE outputRange;
 	outputRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
-
-	CD3DX12_DESCRIPTOR_RANGE accelRange;
-	accelRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
 	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
