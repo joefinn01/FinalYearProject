@@ -33,6 +33,6 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     float4 diffuse = CalculateDiffuseLighting(hitPosW, normalW);
 
     //payload.color = g_ScenePerFrameCB.LightAmbientColor + diffuse;
-    payload.color = g_GameObjectCB.Albedo;
-    //payload.color = texColour;
+    //payload.color = g_GameObjectCB.Albedo;
+    payload.color = texColour;
 }

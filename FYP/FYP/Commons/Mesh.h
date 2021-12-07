@@ -18,12 +18,20 @@ struct Primitive
 		m_uiNumIndices = 0;
 		m_uiNumVertices = 0;
 		m_uiFirstVertex = 0;
+		m_iAlbedoIndex = 0;
+
+		m_pIndexDesc = nullptr;
+		m_pVertexDesc = nullptr;
 	}
+
+	Descriptor* m_pIndexDesc;
+	Descriptor* m_pVertexDesc;
 
 	UINT16 m_uiFirstIndex;
 	UINT16 m_uiFirstVertex;
 	UINT16 m_uiNumIndices;
 	UINT16 m_uiNumVertices;
+	int m_iAlbedoIndex;
 };
 
 struct MeshNode
@@ -67,14 +75,10 @@ public:
 	UploadBuffer<Vertex>* GetVertexUploadBuffer();
 	UploadBuffer<UINT16>* GetIndexUploadBuffer();
 
-	Descriptor* GetVertexDesc();
-	Descriptor* GetIndexDesc();
-
 	std::vector<MeshNode*>* GetRootNodes();
 
 	UINT16 GetNumVertices() const;
 	UINT16 GetNumIndices() const;
-	UINT16 GetNumNodes() const;
 
 protected:
 
@@ -84,14 +88,10 @@ private:
 	UploadBuffer<Vertex>* m_pVertexBuffer;
 	UploadBuffer<UINT16>* m_pIndexBuffer;
 
-	Descriptor* m_pIndexDesc;
-	Descriptor* m_pVertexDesc;
-
 	std::vector<MeshNode*> m_RootNodes;
 
 	UINT16 m_uiNumVertices;
 	UINT16 m_uiNumIndices;
-	UINT16 m_uiNumNodes;
 
 	AccelerationBuffers m_BottomLevel;
 

@@ -26,6 +26,7 @@
 #endif
 
 #include <vector>
+#include <queue>
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
@@ -1169,26 +1170,54 @@ bool App::CreateHitGroupShaderTable()
 
 	HitGroupRootArgs hitGroupRootArgs;
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), ObjectManager::GetInstance()->GetNumGameObjects(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
 
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
+
+	MeshNode* pNode;
+	Mesh* pMesh;
+
+	std::queue<MeshNode*> meshNodes;
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
 		hitGroupRootArgs.gameObjectCB = it->second->GetCB();
 
-		hitGroupRootArgs.indexDesc = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetIndexDesc()->GetDescriptorIndex());
+		pMesh = it->second->GetMesh();
 
-		if (it->second->GetMesh()->GetTextures()->size() != 0)
+		for (int i = 0; i < pMesh->GetRootNodes()->size(); ++i)
 		{
-			hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(0)->GetDescriptor()->GetDescriptorIndex());
+			meshNodes.push(pMesh->GetRootNodes()->at(i));
 		}
 
-		if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+		while (meshNodes.empty() == false)
 		{
-			LOG_ERROR(tag, L"Failed to add a hit group shader record!");
+			pNode = meshNodes.front();
 
-			return false;
+			meshNodes.pop();
+
+			//Push child nodes to queue
+			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
+			{
+				meshNodes.push(pNode->m_ChildNodes[i]);
+			}
+
+			//Assign per primitive information
+			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
+			{
+				if (pNode->m_Primitives[i]->m_iAlbedoIndex != -1)
+				{
+					hitGroupRootArgs.indexDesc = m_pSrvUavHeap->GetGpuDescriptorHandle(pNode->m_Primitives[i]->m_pIndexDesc->GetDescriptorIndex());
+					hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iAlbedoIndex)->GetDescriptor()->GetDescriptorIndex());
+				}
+
+				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+				{
+					LOG_ERROR(tag, L"Failed to add a hit group shader record!");
+
+					return false;
+				}
+			}
 		}
 	}
 
@@ -1628,8 +1657,8 @@ bool App::CreateDescriptorHeaps()
 {
 	m_pSrvUavHeap = new DescriptorHeap();
 
-	//2 descriptors per mesh (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture
-	if (m_pSrvUavHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumMeshes() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1) == false)
+	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture
+	if (m_pSrvUavHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1) == false)
 	{
 		return false;
 	}

@@ -4,6 +4,8 @@
 #include "Helpers/DebugHelper.h"
 #include "Apps/App.h"
 
+#include <queue>
+
 Tag tag = L"Mesh";
 
 Mesh::Mesh()
@@ -13,8 +15,6 @@ Mesh::Mesh()
 	m_pVertexBuffer = nullptr;
 	m_pIndexBuffer = nullptr;
 	m_RootNodes = std::vector<MeshNode*>();
-	m_pIndexDesc = nullptr;
-	m_pVertexDesc = nullptr;
 
 	m_uiNumIndices = 0;
 	m_uiNumVertices = 0;
@@ -24,11 +24,11 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 {
 	ID3D12Device5* pDevice = (ID3D12Device5*)App::GetApp()->GetDevice();
 
-	std::vector<MeshNode*> meshNodes;
+	std::queue<MeshNode*> meshNodes;
 
 	for (int i = 0; i < m_RootNodes.size(); ++i)
 	{
-		meshNodes.push_back(m_RootNodes[i]);
+		meshNodes.push(m_RootNodes[i]);
 	}
 
 	MeshNode* pNode;
@@ -39,14 +39,14 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 	while (meshNodes.size() != 0)
 	{
 		//get reference and then remove node from vector
-		pNode = meshNodes[0];
+		pNode = meshNodes.front();
 
-		meshNodes.erase(meshNodes.begin());
+		meshNodes.pop();
 
 		//Push child mesh nodes into vector
 		for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
 		{
-			meshNodes.push_back(pNode->m_ChildNodes[i]);
+			meshNodes.push(pNode->m_ChildNodes[i]);
 		}
 
 		if (pNode->m_Primitives.size() == 0)
@@ -56,8 +56,17 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 
 		UploadBuffer<XMFLOAT3X4>* pTransformUploadBuffer = new UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
 
-		XMFLOAT3X4 world3X4;		
-		XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
+		XMFLOAT3X4 world3X4;
+
+		if (pNode->m_pParent != nullptr)
+		{
+			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_pParent->m_Transform) * XMLoadFloat4x4(&pNode->m_Transform));
+		}
+		else
+		{
+			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
+		}
+
 
 		pTransformUploadBuffer->CopyData(0, world3X4);
 
@@ -140,16 +149,6 @@ UploadBuffer<UINT16>* Mesh::GetIndexUploadBuffer()
 	return m_pIndexBuffer;
 }
 
-Descriptor* Mesh::GetVertexDesc()
-{
-	return m_pVertexDesc;
-}
-
-Descriptor* Mesh::GetIndexDesc()
-{
-	return m_pIndexDesc;
-}
-
 std::vector<MeshNode*>* Mesh::GetRootNodes()
 {
 	return &m_RootNodes;
@@ -163,9 +162,4 @@ UINT16 Mesh::GetNumVertices() const
 UINT16 Mesh::GetNumIndices() const
 {
 	return m_uiNumIndices;
-}
-
-UINT16 Mesh::GetNumNodes() const
-{
-	return m_uiNumNodes;
 }

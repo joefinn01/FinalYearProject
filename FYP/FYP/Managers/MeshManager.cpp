@@ -8,6 +8,9 @@
 #include "Commons/SRVDescriptor.h"
 #include "Commons/Mesh.h"
 #include "Managers/TextureManager.h"
+#include "Commons/Mesh.h"
+
+#include <queue>
 
 Tag tag = L"MeshManager";
 
@@ -15,26 +18,52 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 {
 	UINT uiIndex;
 
+	MeshNode* pNode;
+
+	std::queue<MeshNode*> meshNodes;
+
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{
+		for (int i = 0; i < it->second->GetRootNodes()->size(); ++i)
+		{
+			meshNodes.push(it->second->GetRootNodes()->at(i));
+		}
+
+		while (meshNodes.empty() == false)
+		{
+			pNode = meshNodes.front();
+
+			meshNodes.pop();
+
+			//Push child nodes to queue
+			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
+			{
+				meshNodes.push(pNode->m_ChildNodes[i]);
+			}
+
+			//create descriptors per primitive
+			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
+			{
+				if (pHeap->Allocate(uiIndex) == false)
+				{
+					return;
+				}
+
+				pNode->m_Primitives[i]->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * pNode->m_Primitives[i]->m_uiNumIndices) / 4, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(UINT16), pNode->m_Primitives[i]->m_uiFirstIndex);
+
+				if (pHeap->Allocate(uiIndex) == false)
+				{
+					return;
+				}
+
+				pNode->m_Primitives[i]->m_pVertexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, pNode->m_Primitives[i]->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex), pNode->m_Primitives[i]->m_uiFirstVertex);
+			}
+		}
+
 		for (int i = 0; i < it->second->m_Textures.size(); ++i)
 		{
 			it->second->m_Textures[i]->CreateDescriptor(pHeap);
 		}
-
-		if (pHeap->Allocate(uiIndex) == false)
-		{
-			return;
-		}
-
-		it->second->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * it->second->m_uiNumIndices) / 4, DXGI_FORMAT_R32_TYPELESS, D3D12_BUFFER_SRV_FLAG_RAW, 0);
-
-		if (pHeap->Allocate(uiIndex) == false)
-		{
-			return;
-		}
-
-		it->second->m_pVertexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, it->second->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex));
 	}
 }
 
@@ -82,14 +111,12 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 		pScene = &model.scenes[0];
 	}
 
-	pMesh->m_uiNumNodes = pScene->nodes.size();
-
 	std::vector<Vertex> vertexBuffer = std::vector<Vertex>();
 	std::vector<UINT16> indexBuffer = std::vector<UINT16>();
 
-	for (UINT i = 0; i < pMesh->m_uiNumNodes; ++i)
+	for (UINT i = 0; i < pScene->nodes.size(); ++i)
 	{
-		if (ProcessNode (nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, pMesh, &vertexBuffer, &indexBuffer) == false)
+		if (ProcessNode(nullptr, model.nodes[pScene->nodes[i]], pScene->nodes[i], model, pMesh, &vertexBuffer, &indexBuffer) == false)
 		{
 			return false;
 		}
@@ -184,6 +211,8 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 	{
 		const tinygltf::Mesh& kMesh = kModel.meshes[kNode.mesh];
 
+		m_uiNumPrimitives += kMesh.primitives.size();
+
 		for (UINT i = 0; i < kMesh.primitives.size(); ++i)
 		{
 			const tinygltf::Primitive& kPrimitive = kMesh.primitives[i];
@@ -246,12 +275,15 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 					pIndexBuffer->push_back(i + uiVertexStart);
 				}
 			}
+			//kPrimitive
+
 
 			Primitive* pPrimitive = new Primitive();
 			pPrimitive->m_uiFirstIndex = uiIndexStart;
 			pPrimitive->m_uiFirstVertex = uiVertexStart;
 			pPrimitive->m_uiNumIndices = uiIndexCount;
 			pPrimitive->m_uiNumVertices = uiVertexCount;
+			pPrimitive->m_iAlbedoIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.baseColorTexture.index;
 
 			pNode->m_Primitives.push_back(pPrimitive);
 		}
@@ -325,6 +357,11 @@ bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, s
 	return true;
 }
 
+UINT MeshManager::GetNumPrimitives() const
+{
+	return m_uiNumPrimitives;
+}
+
 bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)
 {
 	tinygltf::Image image;
@@ -385,12 +422,12 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 
 	if (GetAttributeData(kModel, kPrimitive, "NORMAL", kppfNormalBuffer, puiNormalStride, nullptr, TINYGLTF_TYPE_VEC3) == false)
 	{
-		//return false;
+		return false;
 	}
 
 	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer0, puiTexCoordStride0, nullptr, TINYGLTF_TYPE_VEC2) == false)
 	{
-		//return false;
+		return false;
 	}
 
 	//if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_1", kppfTexCoordBuffer1, puiTexCoordStride1, nullptr, TINYGLTF_TYPE_VEC2) == false)

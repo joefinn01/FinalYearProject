@@ -46,6 +46,8 @@ public:
 
 	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers);
 
+	UINT GetNumPrimitives() const;
+
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT16>* pIndexBuffer);
 
@@ -57,5 +59,7 @@ private:
 	bool LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList);
 
 	std::unordered_map<std::string, Mesh*> m_Meshes;
+
+	UINT m_uiNumPrimitives = 0;
 };
 
