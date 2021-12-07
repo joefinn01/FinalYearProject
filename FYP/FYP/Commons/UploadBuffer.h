@@ -52,7 +52,7 @@ public:
 		//Ensuring always a multiple of 255 by adding 255 and masking bits
 		if (bIsConstant)
 		{
-			m_uiByteSize = DirectXHelper::CalculatePackedBufferSize(m_uiByteSize);
+			m_uiByteSize = MathHelper::CalculatePaddedConstantBufferSize(m_uiByteSize);
 		}
 
 		HRESULT hr = pDevice->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
@@ -64,7 +64,7 @@ public:
 
 		if (FAILED(hr))
 		{
-			LOG_ERROR(tag, "Failed to create committed resource in upload buffer!");
+			LOG_ERROR(tag, L"Failed to create committed resource in upload buffer!");
 
 			return;
 		}
@@ -73,7 +73,7 @@ public:
 
 		if (FAILED(hr))
 		{
-			LOG_ERROR(tag, "Failed to map the upload buffer!");
+			LOG_ERROR(tag, L"Failed to map the upload buffer!");
 
 			return;
 		}
