@@ -193,10 +193,22 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			kNode.matrix[8], kNode.matrix[9], kNode.matrix[10], kNode.matrix[11],
 			kNode.matrix[12], kNode.matrix[13], kNode.matrix[14], kNode.matrix[15]
 		);
+
+		if (pNode->m_pParent != nullptr)
+		{
+			XMStoreFloat4x4(&pNode->m_Transform, XMLoadFloat4x4(&pNode->m_Transform) * XMLoadFloat4x4(&pNode->m_pParent->m_Transform));
+		}
 	}
 	else
 	{
-		XMStoreFloat4x4(&pNode->m_Transform, XMMatrixScalingFromVector(XMLoadFloat3(&scale)) * XMMatrixRotationQuaternion(XMQuaternionNormalize(XMLoadFloat4(&rotation))) * XMMatrixTranslationFromVector(XMLoadFloat3(&translation)));
+		if (pNode->m_pParent != nullptr)
+		{
+			XMStoreFloat4x4(&pNode->m_Transform, XMMatrixScalingFromVector(XMLoadFloat3(&scale)) * XMMatrixRotationQuaternion(XMQuaternionNormalize(XMLoadFloat4(&rotation))) * XMMatrixTranslationFromVector(XMLoadFloat3(&translation)) * XMLoadFloat4x4(&pNode->m_pParent->m_Transform));
+		}
+		else
+		{
+			XMStoreFloat4x4(&pNode->m_Transform, XMMatrixScalingFromVector(XMLoadFloat3(&scale)) * XMMatrixRotationQuaternion(XMQuaternionNormalize(XMLoadFloat4(&rotation))) * XMMatrixTranslationFromVector(XMLoadFloat3(&translation)));
+		}
 	}
 
 	for (UINT i = 0; i < kNode.children.size(); ++i)

@@ -60,7 +60,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 
 		if (pNode->m_pParent != nullptr)
 		{
-			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_pParent->m_Transform) * XMLoadFloat4x4(&pNode->m_Transform));
+			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
 		}
 		else
 		{
