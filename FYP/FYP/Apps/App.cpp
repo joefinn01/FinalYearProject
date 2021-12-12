@@ -979,7 +979,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/SciFiHelmet/gLTF/SciFiHelmet.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1308,7 +1308,7 @@ void App::CreateCBs()
 	//Create upload buffers
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
-		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount * MeshManager::GetInstance()->GetNumPrimitives(), false);
+		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), false);
 		m_FrameResources[i].m_pLightCBUpload = new UploadBuffer<LightCB>(m_pDevice.Get(), MAX_LIGHTS, false);
 	}
 }
