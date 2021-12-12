@@ -9,19 +9,39 @@
 using namespace DirectX;
 #endif
 
+#define NUM_LIGHTS 5
+
+struct LightCB
+{
+	XMFLOAT3 Position;
+	int Type;
+
+	XMFLOAT3 Color;
+	int Enabled;
+
+	XMFLOAT3 Attenuation;
+	float pad;
+};
+
 struct ScenePerFrameCB
 {
 	XMMATRIX InvWorldProjection;
 
 	XMVECTOR EyePosW;
-	XMVECTOR LightPosW;
-	XMVECTOR LightAmbientColor;
-	XMVECTOR LightDiffuseColor;
+
+	LightCB Lights[NUM_LIGHTS];
 };
 
-struct GameObjectCB
+struct PrimitivePerFrameCB
 {
-	XMFLOAT4 Albedo;
+	XMMATRIX World;
+	XMMATRIX InvWorld;
+};
+
+struct PrimitiveInstanceCB
+{
+	int InstanceIndex;
+	XMFLOAT3 pad;
 };
 
 #endif // CONSTANT_BUFFERS_H

@@ -49,7 +49,7 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 					return;
 				}
 
-				pNode->m_Primitives[i]->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * pNode->m_Primitives[i]->m_uiNumIndices) / 4, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(UINT16), pNode->m_Primitives[i]->m_uiFirstIndex);
+				pNode->m_Primitives[i]->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * pNode->m_Primitives[i]->m_uiNumIndices) / 2, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(UINT16), pNode->m_Primitives[i]->m_uiFirstIndex);
 
 				if (pHeap->Allocate(uiIndex) == false)
 				{
@@ -123,18 +123,10 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 	}
 
 	pMesh->m_pVertexBuffer = new UploadBuffer<Vertex>(App::GetApp()->GetDevice(), vertexBuffer.size(), false);
-
-	for (UINT i = 0; i < vertexBuffer.size(); ++i)
-	{
-		pMesh->m_pVertexBuffer->CopyData(i, vertexBuffer[i]);
-	}
+	pMesh->m_pVertexBuffer->CopyData(0, vertexBuffer);
 
 	pMesh->m_pIndexBuffer = new UploadBuffer<UINT16>(App::GetApp()->GetDevice(), indexBuffer.size(), false);
-
-	for (UINT i = 0; i < indexBuffer.size(); ++i)
-	{
-		pMesh->m_pIndexBuffer->CopyData(i, indexBuffer[i]);
-	}
+	pMesh->m_pIndexBuffer->CopyData(0, indexBuffer);
 
 	pMesh->m_uiNumVertices = vertexBuffer.size();
 	pMesh->m_uiNumIndices = indexBuffer.size();
@@ -237,15 +229,15 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			//Vertex information buffers
 			const float* kpfPositionBuffer = nullptr;
 			const float* kpfNormalBuffer = nullptr;
-			const float* kpfTexCoordBuffer0 = nullptr;
-			const float* kpfTexCoordBuffer1 = nullptr;
+			const float* kpfTangentBuffer = nullptr;
+			const float* kpfTexCoordBuffer = nullptr;
 
 			UINT uiPositionStride;
 			UINT uiNormalStride;
-			UINT uiTexCoordStride0;
-			UINT uiTexCoordStride1;
+			UINT uiTexCoordStride;
+			UINT uiTangentStride;
 
-			if (GetVertexData(kModel, kPrimitive, &kpfPositionBuffer, &uiPositionStride, &kpfNormalBuffer, &uiNormalStride, &kpfTexCoordBuffer0, &uiTexCoordStride0, &kpfTexCoordBuffer1, &uiTexCoordStride1, &uiVertexCount) == false)
+			if (GetVertexData(kModel, kPrimitive, &kpfPositionBuffer, &uiPositionStride, &kpfNormalBuffer, &uiNormalStride, &kpfTexCoordBuffer, &uiTexCoordStride, &kpfTangentBuffer, &uiTangentStride, &uiVertexCount) == false)
 			{
 				return false;
 			}
@@ -256,16 +248,19 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			{
 				vertex.Position = XMFLOAT3(kpfPositionBuffer[j * uiPositionStride], kpfPositionBuffer[(j * uiPositionStride) + 1], kpfPositionBuffer[(j * uiPositionStride) + 2]);
 
-				if (kpfTexCoordBuffer0 != nullptr)
-				{
-					vertex.TexCoords0 = XMFLOAT2(kpfTexCoordBuffer0[j * uiTexCoordStride0], kpfTexCoordBuffer0[(j * uiTexCoordStride0) + 1]);
-				}
-
-				//vertex.TexCoords1 = XMFLOAT2(kpfTexCoordBuffer1[j * uiTexCoordStride1], kpfTexCoordBuffer1[(j * uiTexCoordStride1) + 1]);
-
 				if (kpfNormalBuffer != nullptr)
 				{
 					XMStoreFloat3(&vertex.Normal, XMVector3Normalize(XMVectorSet(kpfNormalBuffer[j * uiNormalStride], kpfNormalBuffer[(j * uiNormalStride) + 1], kpfNormalBuffer[(j * uiNormalStride) + 2], 0.0f)));
+				}
+
+				if (kpfTangentBuffer != nullptr)
+				{
+					XMStoreFloat4(&vertex.Tangent, XMVector4Normalize(XMVectorSet(kpfTangentBuffer[j * uiTangentStride], kpfTangentBuffer[(j * uiTangentStride) + 1], kpfTangentBuffer[(j * uiTangentStride) + 2], kpfTangentBuffer[(j * uiTangentStride) + 3])));
+				}
+
+				if (kpfTexCoordBuffer != nullptr)
+				{
+					vertex.TexCoords = XMFLOAT2(kpfTexCoordBuffer[j * uiTexCoordStride], kpfTexCoordBuffer[(j * uiTexCoordStride) + 1]);
 				}
 
 				pVertexBuffer->push_back(vertex);
@@ -296,6 +291,10 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			pPrimitive->m_uiNumIndices = uiIndexCount;
 			pPrimitive->m_uiNumVertices = uiVertexCount;
 			pPrimitive->m_iAlbedoIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.baseColorTexture.index;
+			pPrimitive->m_iNormalIndex = kModel.materials[kPrimitive.material].normalTexture.index;
+			pPrimitive->m_iMetallicRoughnessIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.metallicRoughnessTexture.index;
+			pPrimitive->m_iOcclusionIndex = kModel.materials[kPrimitive.material].occlusionTexture.index;
+			pPrimitive->m_iIndex = m_uiNumPrimitives - kMesh.primitives.size() + i;
 
 			pNode->m_Primitives.push_back(pPrimitive);
 		}
@@ -425,7 +424,7 @@ bool MeshManager::RemoveMesh(std::string sName)
 	return true;
 }
 
-bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer0, UINT* puiTexCoordStride0, const float** kppfTexCoordBuffer1, UINT* puiTexCoordStride1, UINT16* puiVertexCount)
+bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT16* puiVertexCount)
 {
 	if (GetAttributeData(kModel, kPrimitive, "POSITION", kppfPositionBuffer, puiPositionStride, puiVertexCount, TINYGLTF_TYPE_VEC3) == false)
 	{
@@ -437,15 +436,15 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 		return false;
 	}
 
-	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer0, puiTexCoordStride0, nullptr, TINYGLTF_TYPE_VEC2) == false)
+	if (GetAttributeData(kModel, kPrimitive, "TANGENT", kppfTangentBuffer, puiTangentStride, nullptr, TINYGLTF_TYPE_VEC4) == false)
 	{
 		return false;
 	}
 
-	//if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_1", kppfTexCoordBuffer1, puiTexCoordStride1, nullptr, TINYGLTF_TYPE_VEC2) == false)
-	//{
-	//	return false;
-	//}
+	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer, puiTexCoordStride, nullptr, TINYGLTF_TYPE_VEC2) == false)
+	{
+		return false;
+	}
 
 	return true;
 }

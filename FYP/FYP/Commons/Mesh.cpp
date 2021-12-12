@@ -57,16 +57,7 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 		UploadBuffer<XMFLOAT3X4>* pTransformUploadBuffer = new UploadBuffer<XMFLOAT3X4>(App::GetApp()->GetDevice(), 1, false);
 
 		XMFLOAT3X4 world3X4;
-
-		if (pNode->m_pParent != nullptr)
-		{
-			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
-		}
-		else
-		{
-			XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
-		}
-
+		XMStoreFloat3x4(&world3X4, XMLoadFloat4x4(&pNode->m_Transform));
 
 		pTransformUploadBuffer->CopyData(0, world3X4);
 

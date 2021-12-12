@@ -18,7 +18,11 @@ struct Primitive
 		m_uiNumIndices = 0;
 		m_uiNumVertices = 0;
 		m_uiFirstVertex = 0;
+
 		m_iAlbedoIndex = 0;
+		m_iNormalIndex = 0;
+		m_iMetallicRoughnessIndex = 0;
+		m_iOcclusionIndex = 0;
 
 		m_pIndexDesc = nullptr;
 		m_pVertexDesc = nullptr;
@@ -31,7 +35,12 @@ struct Primitive
 	UINT16 m_uiFirstVertex;
 	UINT16 m_uiNumIndices;
 	UINT16 m_uiNumVertices;
+
+	int m_iIndex;
 	int m_iAlbedoIndex;
+	int m_iNormalIndex;
+	int m_iMetallicRoughnessIndex;
+	int m_iOcclusionIndex;
 };
 
 struct MeshNode

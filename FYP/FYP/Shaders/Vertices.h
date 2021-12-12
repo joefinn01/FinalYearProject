@@ -13,8 +13,8 @@ struct Vertex
 {
 	XMFLOAT3 Position;
 	XMFLOAT3 Normal;
-	XMFLOAT2 TexCoords0;
-	XMFLOAT2 TexCoords1;
+	XMFLOAT4 Tangent;
+	XMFLOAT2 TexCoords;
 };
 
 #endif // VERTICES_H

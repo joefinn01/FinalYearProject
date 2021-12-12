@@ -360,7 +360,9 @@ void App::Draw()
 
 	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
 
-	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pPerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::PER_FRAME_PRIMITIVE_CB, GetPrimitiveUploadBuffer()->GetBufferGPUAddress(0));
+
+	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
 	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
 
@@ -975,10 +977,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	//MeshManager::GetInstance()->LoadMesh("Models/simpleMesh/gLTF/simpleMesh.gltf", "Duck", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/BoxTexturedNonPowerOfTwo/gLTF/BoxTexturedNonPowerOfTwo.gltf", "Box", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/CesiumMilkTruck/gLTF/CesiumMilkTruck.gltf", "Duck", m_pGraphicsCommandList.Get());
-	//MeshManager::GetInstance()->LoadMesh("Models/Fox/gLTF/Fox.gltf", "Duck", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1163,9 +1162,12 @@ bool App::CreateHitGroupShaderTable()
 
 	struct HitGroupRootArgs
 	{
-		GameObjectCB gameObjectCB;
-		D3D12_GPU_DESCRIPTOR_HANDLE diffuseHandle;
-		D3D12_GPU_DESCRIPTOR_HANDLE indexDesc;
+		D3D12_GPU_DESCRIPTOR_HANDLE AlbedoHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE NormalHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE MetallicRoughnessHandle;
+		D3D12_GPU_DESCRIPTOR_HANDLE OcclusionHandle;
+		PrimitiveInstanceCB Cb;
+		D3D12_GPU_DESCRIPTOR_HANDLE IndexDesc;
 	};
 
 	HitGroupRootArgs hitGroupRootArgs;
@@ -1181,8 +1183,6 @@ bool App::CreateHitGroupShaderTable()
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
-		hitGroupRootArgs.gameObjectCB = it->second->GetCB();
-
 		pMesh = it->second->GetMesh();
 
 		for (int i = 0; i < pMesh->GetRootNodes()->size(); ++i)
@@ -1205,11 +1205,33 @@ bool App::CreateHitGroupShaderTable()
 			//Assign per primitive information
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
 			{
+				hitGroupRootArgs.IndexDesc = m_pSrvUavHeap->GetGpuDescriptorHandle(pNode->m_Primitives[i]->m_pIndexDesc->GetDescriptorIndex());
+
 				if (pNode->m_Primitives[i]->m_iAlbedoIndex != -1)
 				{
-					hitGroupRootArgs.indexDesc = m_pSrvUavHeap->GetGpuDescriptorHandle(pNode->m_Primitives[i]->m_pIndexDesc->GetDescriptorIndex());
-					hitGroupRootArgs.diffuseHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iAlbedoIndex)->GetDescriptor()->GetDescriptorIndex());
+
+					hitGroupRootArgs.AlbedoHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iAlbedoIndex)->GetDescriptor()->GetDescriptorIndex());
 				}
+
+				if (pNode->m_Primitives[i]->m_iNormalIndex != -1)
+				{
+
+					hitGroupRootArgs.NormalHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iNormalIndex)->GetDescriptor()->GetDescriptorIndex());
+				}
+
+				if (pNode->m_Primitives[i]->m_iMetallicRoughnessIndex != -1)
+				{
+
+					hitGroupRootArgs.MetallicRoughnessHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iMetallicRoughnessIndex)->GetDescriptor()->GetDescriptorIndex());
+				}
+
+				if (pNode->m_Primitives[i]->m_iOcclusionIndex != -1)
+				{
+
+					hitGroupRootArgs.OcclusionHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iOcclusionIndex)->GetDescriptor()->GetDescriptorIndex());
+				}
+
+				hitGroupRootArgs.Cb.InstanceIndex = pNode->m_Primitives[i]->m_iIndex;
 
 				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 				{
@@ -1261,7 +1283,19 @@ bool App::CreateOutputBuffer()
 
 void App::CreateCBUploadBuffers()
 {
-	m_pPerFrameCBUpload = new UploadBuffer<ScenePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount, true);
+	m_pScenePerFrameCBUpload = new UploadBuffer<ScenePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount, true);
+
+	m_PrimitivePerFrameCBs.reserve(MeshManager::GetInstance()->GetNumPrimitives());
+
+	for (int i = 0; i < MeshManager::GetInstance()->GetNumPrimitives(); ++i)
+	{
+		m_PrimitivePerFrameCBs.push_back(PrimitivePerFrameCB());
+	}
+
+	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	{
+		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount * MeshManager::GetInstance()->GetNumPrimitives(), false);
+	}
 }
 
 bool App::CheckRaytracingSupport()
@@ -1289,7 +1323,7 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 1), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
 
 	ObjectManager::GetInstance()->AddCamera(pCamera);
 
@@ -1299,25 +1333,10 @@ void App::CreateCameras()
 void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
-	MeshManager::GetInstance()->GetMesh("Box", pMesh);
-
-	GameObjectCB cb;
-	cb.Albedo = XMFLOAT4(1, 0, 0, 1);
+	MeshManager::GetInstance()->GetMesh("SciFiHelmet", pMesh);
 
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Box1", XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
-
-	cb.Albedo = XMFLOAT4(0, 0, 1, 1);
-
-	pGameObject = new GameObject();
-	pGameObject->Init("Box3", XMFLOAT3(-5, 0, 5), XMFLOAT3(0, 20, 0), XMFLOAT3(1, 1, 1), pMesh, cb);
-
-	cb.Albedo = XMFLOAT4(0, 1, 0, 1);
-
-	MeshManager::GetInstance()->GetMesh("Duck", pMesh);
-
-	pGameObject = new GameObject();
-	pGameObject->Init("Box2", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(0.5f, 0.5f, 0.5f), pMesh, cb);
+	pGameObject->Init("Box1", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
 
 	CreateCameras();
 
@@ -1328,9 +1347,8 @@ void App::InitConstantBuffers()
 {
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
-		m_PerFrameCBs[i].LightAmbientColor = XMVectorSet(0.5f, 0.5f, 0.5f, 1.0f);
-		m_PerFrameCBs[i].LightDiffuseColor = XMVectorSet(0.5f, 0.0f, 0.0f, 1.0f);
-		m_PerFrameCBs[i].LightPosW = XMVectorSet(0, 0, -2, 1);
+		m_PerFrameCBs[i].LightColor = XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f);
+		m_PerFrameCBs[i].LightPosW = XMVectorSet(0, 0, 0, 1);
 
 		UpdatePerFrameCB(i);
 	}
@@ -1343,7 +1361,54 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 	m_PerFrameCBs[uiFrameIndex].EyePosW = XMLoadFloat3(&pCamera->GetPosition());
 	m_PerFrameCBs[uiFrameIndex].InvWorldProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, XMLoadFloat4x4(&pCamera->GetViewProjectionMatrix())));
 
-	m_pPerFrameCBUpload->CopyData(uiFrameIndex, m_PerFrameCBs[uiFrameIndex]);
+	m_pScenePerFrameCBUpload->CopyData(uiFrameIndex, m_PerFrameCBs[uiFrameIndex]);
+
+	//Update primitive per frame constant buffers
+	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
+
+	MeshNode* pNode;
+	Mesh* pMesh;
+
+	std::queue<MeshNode*> meshNodes;
+
+	XMMATRIX invWorld;
+
+	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
+	{
+		pMesh = it->second->GetMesh();
+
+		for (int i = 0; i < pMesh->GetRootNodes()->size(); ++i)
+		{
+			meshNodes.push(pMesh->GetRootNodes()->at(i));
+		}
+
+		while (meshNodes.empty() == false)
+		{
+			pNode = meshNodes.front();
+
+			meshNodes.pop();
+
+			//Push child nodes to queue
+			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
+			{
+				meshNodes.push(pNode->m_ChildNodes[i]);
+			}
+
+			//Assign per primitive information
+			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
+			{
+				invWorld = XMLoadFloat4x4(&pNode->m_Transform) * XMLoadFloat4x4(&it->second->GetWorldMatrix());
+
+				m_PrimitivePerFrameCBs[pNode->m_Primitives[i]->m_iIndex].World = XMMatrixTranspose(invWorld);
+
+				invWorld.r[3] = XMVectorSet(0, 0, 0, 1);
+
+				m_PrimitivePerFrameCBs[pNode->m_Primitives[i]->m_iIndex].InvWorld = XMMatrixInverse(nullptr, invWorld);
+			}
+		}
+	}
+
+	GetPrimitiveUploadBuffer()->CopyData(0, m_PrimitivePerFrameCBs);
 }
 
 void App::LogAdapters()
@@ -1525,6 +1590,16 @@ Microsoft::WRL::ComPtr<ID3D12CommandAllocator>* App::GetCommandAllocatorComptr(i
 	return &m_FrameResources[iIndex].m_pCommandAllocator;
 }
 
+UploadBuffer<PrimitivePerFrameCB>* App::GetPrimitiveUploadBuffer()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pPrimitivePerFrameCBUpload;
+}
+
+UploadBuffer<PrimitivePerFrameCB>* App::GetPrimitiveUploadBuffer(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pPrimitivePerFrameCBUpload;
+}
+
 UINT64 App::GetFenceValue()
 {
 	return m_FrameResources[m_uiFrameIndex].m_uiFenceValue;
@@ -1558,14 +1633,26 @@ bool App::CreateSignatures()
 bool App::CreateLocalSignature()
 {
 	CD3DX12_DESCRIPTOR_RANGE indexVertexRange;
-	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 1);
+	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)2, 1);
 
-	CD3DX12_DESCRIPTOR_RANGE diffuseTable;
-	diffuseTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 3);
+	CD3DX12_DESCRIPTOR_RANGE albedoRange;
+	albedoRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 4);
+
+	CD3DX12_DESCRIPTOR_RANGE normalRange;
+	normalRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 5);
+
+	CD3DX12_DESCRIPTOR_RANGE metallicRoughnessRange;
+	metallicRoughnessRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 6);
+
+	CD3DX12_DESCRIPTOR_RANGE occlusionRange;
+	occlusionRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 7);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
-	slotRootParameter[LocalRootSignatureParams::CUBE_CONSTANTS].InitAsConstants((sizeof(GameObjectCB) - 1) / (sizeof(UINT32) + 1), 1);	//Cube cb
-	slotRootParameter[LocalRootSignatureParams::DIFFUSE_TEX].InitAsDescriptorTable(1, &diffuseTable);
+	slotRootParameter[LocalRootSignatureParams::ALBEDO_TEX].InitAsDescriptorTable(1, &albedoRange);
+	slotRootParameter[LocalRootSignatureParams::NORMAL_TEX].InitAsDescriptorTable(1, &normalRange);
+	slotRootParameter[LocalRootSignatureParams::METALLIC_ROUGHNESS_TEX].InitAsDescriptorTable(1, &metallicRoughnessRange);
+	slotRootParameter[LocalRootSignatureParams::OCCLUSION_TEX].InitAsDescriptorTable(1, &occlusionRange);
+	slotRootParameter[LocalRootSignatureParams::PRIMITIVE_CB].InitAsConstants((sizeof(PrimitiveInstanceCB) - 1) / (sizeof(UINT32) + 1), 1);
 	slotRootParameter[LocalRootSignatureParams::VERTEX_INDEX].InitAsDescriptorTable(1, &indexVertexRange);	//Reference to vertex and index buffer
 
 	CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
@@ -1605,6 +1692,7 @@ bool App::CreateGlobalSignature()
 	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
 	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
 	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);	//Reference to TLAS
+	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_PRIMITIVE_CB].InitAsShaderResourceView(3);
 	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();

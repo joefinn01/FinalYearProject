@@ -8,6 +8,12 @@ struct RayPayload
     float4 color;
 };
 
+struct Ray
+{
+    float3 origin;
+    float3 direction;
+};
+
 RaytracingAccelerationStructure Scene : register(t0, space0);
 
 RWTexture2D<float4> RenderTarget : register(u0);
@@ -15,10 +21,9 @@ RWTexture2D<float4> RenderTarget : register(u0);
 ByteAddressBuffer Indices : register(t1, space0);
 StructuredBuffer<Vertex> Vertices : register(t2, space0);
 
-ConstantBuffer<ScenePerFrameCB> g_ScenePerFrameCB : register(b0);
-ConstantBuffer<GameObjectCB> g_GameObjectCB : register(b1);
+StructuredBuffer<PrimitivePerFrameCB> g_PrimitivePerFrameCB : register(t3);
 
-Texture2D<float4> g_LocalDiffuse : register(t3);
+ConstantBuffer<ScenePerFrameCB> g_ScenePerFrameCB : register(b0);
 
 SamplerState SamPointWrap : register(s0);
 SamplerState SamPointClamp : register(s1);
@@ -26,6 +31,8 @@ SamplerState SamLinearWrap : register(s2);
 SamplerState SamLinearClamp : register(s3);
 SamplerState SamAnisotropicWrap : register(s4);
 SamplerState SamAnisotropicClamp : register(s5);
+
+static const float PI = 3.14159265f;
 
 // Load three 16 bit indices from a byte addressed buffer.
 uint3 Load3x16BitIndices(uint offsetBytes)
@@ -85,11 +92,4 @@ float3 InterpolateAttribute(float3 vertexAttribute[3], BuiltInTriangleIntersecti
     return vertexAttribute[0] +
         attr.barycentrics.x * (vertexAttribute[1] - vertexAttribute[0]) +
         attr.barycentrics.y * (vertexAttribute[2] - vertexAttribute[0]);
-}
-
-float4 CalculateDiffuseLighting(float3 posW, float3 normalW)
-{
-    float3 toLight = normalize(g_ScenePerFrameCB.LightPosW.xyz - posW);
-    
-    return g_GameObjectCB.Albedo * g_ScenePerFrameCB.LightDiffuseColor * max(0.0f, dot(toLight, normalW));
 }

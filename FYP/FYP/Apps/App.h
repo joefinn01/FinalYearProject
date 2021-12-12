@@ -28,6 +28,8 @@ struct FrameResources
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
 
+	UploadBuffer<PrimitivePerFrameCB>* m_pPrimitivePerFrameCBUpload = nullptr;
+
 	UINT64 m_uiFenceValue = 0;
 };
 
@@ -38,6 +40,7 @@ namespace GlobalRootSignatureParams
 		OUTPUT = 0,
 		ACCELERATION_STRUCTURE,
 		PER_FRAME_SCENE_CB,
+		PER_FRAME_PRIMITIVE_CB,
 		COUNT
 	};
 }
@@ -45,8 +48,11 @@ namespace GlobalRootSignatureParams
 namespace LocalRootSignatureParams {
 	enum Value 
 	{
-		CUBE_CONSTANTS = 0,
-		DIFFUSE_TEX,
+		ALBEDO_TEX,
+		NORMAL_TEX,
+		METALLIC_ROUGHNESS_TEX,
+		OCCLUSION_TEX,
+		PRIMITIVE_CB,
 		VERTEX_INDEX,
 		COUNT
 	};
@@ -145,6 +151,9 @@ protected:
 	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr();
 	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr(int iIndex);
 
+	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer();
+	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer(int iIndex);
+
 	UINT64 GetFenceValue();
 	UINT64 GetFenceValue(int iIndex);
 
@@ -199,7 +208,9 @@ protected:
 	UINT m_uiHitGroupRecordSize;
 	UINT m_uiRayGenRecordSize;
 
-	UploadBuffer<ScenePerFrameCB>* m_pPerFrameCBUpload = nullptr;
+	UploadBuffer<ScenePerFrameCB>* m_pScenePerFrameCBUpload = nullptr;
+
+	std::vector<PrimitivePerFrameCB> m_PrimitivePerFrameCBs;
 
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
 

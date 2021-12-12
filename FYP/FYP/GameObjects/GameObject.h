@@ -25,7 +25,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, GameObjectCB cb);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -63,18 +63,15 @@ public:
 	DirectX::XMFLOAT4 GetRightVector() const;
 
 	DirectX::XMFLOAT4X4 GetWorldMatrix() const;
+	DirectX::XMFLOAT4X4 GetWorldMatrixNoScale() const;
 
 	Mesh* GetMesh() const;
 	void SetMesh(Mesh* pMesh);
 
 	DirectX::XMFLOAT3X4 Get3X4WorldMatrix();
 
-	GameObjectCB GetCB() const;
-
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
-
-	GameObjectCB m_CB;
 
 private:
 	void UpdateAxisVectors();
