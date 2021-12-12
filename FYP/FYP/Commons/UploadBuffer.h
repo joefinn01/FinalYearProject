@@ -102,6 +102,11 @@ public:
 		memcpy(&m_pMappedData[iIndex * m_uiByteSize], &data, sizeof(T));
 	}
 
+	void CopyData(int iIndex, const std::vector<T>& data)
+	{
+		memcpy(&m_pMappedData[iIndex * m_uiByteSize], &data[0], sizeof(T) * data.size());
+	}
+
 	D3D12_GPU_VIRTUAL_ADDRESS GetBufferGPUAddress(UINT uiCount)
 	{
 		return m_pUploadBuffer.Get()->GetGPUVirtualAddress() + (uiCount * m_uiByteSize);
