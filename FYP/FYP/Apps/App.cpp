@@ -151,7 +151,7 @@ bool App::Init()
 		return false;
 	}
 
-	CreateCBUploadBuffers();
+	CreateCBs();
 
 	InitScene();
 
@@ -360,7 +360,9 @@ void App::Draw()
 
 	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
 
-	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::PER_FRAME_PRIMITIVE_CB, GetPrimitiveUploadBuffer()->GetBufferGPUAddress(0));
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::PER_FRAME_PRIMITIVE_CB, GetPrimitiveUploadBuffer()->GetBufferGPUAddress());
+
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(GlobalRootSignatureParams::LIGHT_CB, GetLightUploadBuffer()->GetBufferGPUAddress());
 
 	m_pGraphicsCommandList->SetComputeRootConstantBufferView(GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
@@ -977,7 +979,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/SciFiHelmet/gLTF/SciFiHelmet.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1281,10 +1283,13 @@ bool App::CreateOutputBuffer()
 	return true;
 }
 
-void App::CreateCBUploadBuffers()
+void App::CreateCBs()
 {
 	m_pScenePerFrameCBUpload = new UploadBuffer<ScenePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount, true);
 
+	//Reserve and populate CB vectors
+
+	//Primitive per frame
 	m_PrimitivePerFrameCBs.reserve(MeshManager::GetInstance()->GetNumPrimitives());
 
 	for (int i = 0; i < MeshManager::GetInstance()->GetNumPrimitives(); ++i)
@@ -1292,9 +1297,19 @@ void App::CreateCBUploadBuffers()
 		m_PrimitivePerFrameCBs.push_back(PrimitivePerFrameCB());
 	}
 
+	//LightCB
+	m_LightCBs.reserve(MAX_LIGHTS);
+
+	for (int i = 0; i < MAX_LIGHTS; ++i)
+	{
+		m_LightCBs.push_back(LightCB());
+	}
+
+	//Create upload buffers
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), s_kuiSwapChainBufferCount * MeshManager::GetInstance()->GetNumPrimitives(), false);
+		m_FrameResources[i].m_pLightCBUpload = new UploadBuffer<LightCB>(m_pDevice.Get(), MAX_LIGHTS, false);
 	}
 }
 
@@ -1345,12 +1360,24 @@ void App::InitScene()
 
 void App::InitConstantBuffers()
 {
+	m_uiNumLights = 2;
+
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
-		m_PerFrameCBs[i].LightColor = XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f);
-		m_PerFrameCBs[i].LightPosW = XMVectorSet(0, 0, 0, 1);
-
 		UpdatePerFrameCB(i);
+	}
+
+	m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
+	m_LightCBs[0].Position = XMFLOAT3(0, 0, 0);
+	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+
+	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
+	m_LightCBs[1].Position = XMFLOAT3(10, 0, 0);
+	m_LightCBs[1].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+
+	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	{
+		GetLightUploadBuffer(i)->CopyData(0, m_LightCBs);
 	}
 }
 
@@ -1358,8 +1385,9 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 {
 	Camera* pCamera = ObjectManager::GetInstance()->GetActiveCamera();
 
-	m_PerFrameCBs[uiFrameIndex].EyePosW = XMLoadFloat3(&pCamera->GetPosition());
+	m_PerFrameCBs[uiFrameIndex].EyePosW = pCamera->GetPosition();
 	m_PerFrameCBs[uiFrameIndex].InvWorldProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, XMLoadFloat4x4(&pCamera->GetViewProjectionMatrix())));
+	m_PerFrameCBs[uiFrameIndex].NumLights = (int)m_uiNumLights;
 
 	m_pScenePerFrameCBUpload->CopyData(uiFrameIndex, m_PerFrameCBs[uiFrameIndex]);
 
@@ -1600,6 +1628,16 @@ UploadBuffer<PrimitivePerFrameCB>* App::GetPrimitiveUploadBuffer(int iIndex)
 	return m_FrameResources[iIndex].m_pPrimitivePerFrameCBUpload;
 }
 
+UploadBuffer<LightCB>* App::GetLightUploadBuffer()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pLightCBUpload;
+}
+
+UploadBuffer<LightCB>* App::GetLightUploadBuffer(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pLightCBUpload;
+}
+
 UINT64 App::GetFenceValue()
 {
 	return m_FrameResources[m_uiFrameIndex].m_uiFenceValue;
@@ -1636,16 +1674,16 @@ bool App::CreateLocalSignature()
 	indexVertexRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)2, 1);
 
 	CD3DX12_DESCRIPTOR_RANGE albedoRange;
-	albedoRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 4);
+	albedoRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 5);
 
 	CD3DX12_DESCRIPTOR_RANGE normalRange;
-	normalRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 5);
+	normalRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 6);
 
 	CD3DX12_DESCRIPTOR_RANGE metallicRoughnessRange;
-	metallicRoughnessRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 6);
+	metallicRoughnessRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 7);
 
 	CD3DX12_DESCRIPTOR_RANGE occlusionRange;
-	occlusionRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 7);
+	occlusionRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, (UINT)1, 8);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[LocalRootSignatureParams::COUNT] = {};
 	slotRootParameter[LocalRootSignatureParams::ALBEDO_TEX].InitAsDescriptorTable(1, &albedoRange);
@@ -1690,10 +1728,11 @@ bool App::CreateGlobalSignature()
 	outputRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0);
 
 	CD3DX12_ROOT_PARAMETER slotRootParameter[GlobalRootSignatureParams::COUNT] = {};
-	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);	//Render target
-	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);	//Reference to TLAS
+	slotRootParameter[GlobalRootSignatureParams::OUTPUT].InitAsDescriptorTable(1, &outputRange);
+	slotRootParameter[GlobalRootSignatureParams::ACCELERATION_STRUCTURE].InitAsShaderResourceView(0);
 	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_PRIMITIVE_CB].InitAsShaderResourceView(3);
-	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);	//Per frame CB
+	slotRootParameter[GlobalRootSignatureParams::LIGHT_CB].InitAsShaderResourceView(4);
+	slotRootParameter[GlobalRootSignatureParams::PER_FRAME_SCENE_CB].InitAsConstantBufferView(0);
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
 

@@ -15,6 +15,7 @@
 #include <array>
 #include <dxcapi.h>
 
+#define MAX_LIGHTS 5
 
 class Timer;
 class DescriptorHeap;
@@ -29,6 +30,7 @@ struct FrameResources
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
 
 	UploadBuffer<PrimitivePerFrameCB>* m_pPrimitivePerFrameCBUpload = nullptr;
+	UploadBuffer<LightCB>* m_pLightCBUpload = nullptr;
 
 	UINT64 m_uiFenceValue = 0;
 };
@@ -41,6 +43,7 @@ namespace GlobalRootSignatureParams
 		ACCELERATION_STRUCTURE,
 		PER_FRAME_SCENE_CB,
 		PER_FRAME_PRIMITIVE_CB,
+		LIGHT_CB,
 		COUNT
 	};
 }
@@ -113,7 +116,7 @@ protected:
 
 	bool CreateOutputBuffer();
 
-	void CreateCBUploadBuffers();
+	void CreateCBs();
 
 	bool CreateSignatures();
 	bool CreateLocalSignature();
@@ -153,6 +156,9 @@ protected:
 
 	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer();
 	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer(int iIndex);
+
+	UploadBuffer<LightCB>* GetLightUploadBuffer();
+	UploadBuffer<LightCB>* GetLightUploadBuffer(int iIndex);
 
 	UINT64 GetFenceValue();
 	UINT64 GetFenceValue(int iIndex);
@@ -211,8 +217,11 @@ protected:
 	UploadBuffer<ScenePerFrameCB>* m_pScenePerFrameCBUpload = nullptr;
 
 	std::vector<PrimitivePerFrameCB> m_PrimitivePerFrameCBs;
+	std::vector<LightCB> m_LightCBs;
 
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
+
+	UINT m_uiNumLights = 0;
 
 	LPCWSTR m_kwsRayGenName = L"RayGen";
 	LPCWSTR m_kwsClosestHitName = L"ClosestHit";

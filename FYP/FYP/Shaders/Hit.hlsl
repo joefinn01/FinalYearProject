@@ -1,9 +1,9 @@
 #include "Commons.hlsli"
 
-Texture2D<float4> g_LocalAlbedo : register(t4);
-Texture2D<float4> g_LocalNormal : register(t5);
-Texture2D<float4> g_LocalMetallicRoughness : register(t6);
-Texture2D<float4> g_LocalOcclusion : register(t7);
+Texture2D<float4> g_LocalAlbedo : register(t5);
+Texture2D<float4> g_LocalNormal : register(t6);
+Texture2D<float4> g_LocalMetallicRoughness : register(t7);
+Texture2D<float4> g_LocalOcclusion : register(t8);
 ConstantBuffer<PrimitiveInstanceCB> l_PrimitiveInstanceCB : register(b1);
 
 float NormalDistribution(float3 normal, float3 halfVec, float fRoughness)
@@ -125,22 +125,20 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 refelctance0 = float3(0.04f, 0.04f, 0.04f);
     refelctance0 = lerp(refelctance0, albedo, fMetallic);
     
-    int iNumLights = 1;
-    
-    for (int i = 0; i < iNumLights; ++i)
+    for (int i = 0; i < g_ScenePerFrameCB.NumLights; ++i)
     {
-        float3 light = g_ScenePerFrameCB.LightPosW.xyz - hitPosW;
+        float3 light = g_LightCB[i].Position - hitPosW;
         
         //Cache distance so not done again when normalizing
-        float fdistance = length(light);
+        float fDistance = length(light);
         
-        light /= fdistance;
+        light /= fDistance;
         
         float3 halfVec = normalize(viewW + light);
 
-        float fAttenuation = 1.0f;
+        float fAttenuation = min(1.0f / dot(g_LightCB[i].Attenuation[0], float3(1.0f, g_LightCB[i].Attenuation[1] * fDistance, g_LightCB[i].Attenuation[2] * fDistance * fDistance)), 1.0f);
 
-        float3 radiance = g_ScenePerFrameCB.LightColor.xyz * fAttenuation;
+        float3 radiance = g_LightCB[i].Color.xyz * fAttenuation;
 
         float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
         float fNDF = NormalDistribution(perPixelNormal, halfVec, fRoughness);

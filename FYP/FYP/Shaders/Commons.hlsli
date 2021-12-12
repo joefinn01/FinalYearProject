@@ -23,6 +23,8 @@ StructuredBuffer<Vertex> Vertices : register(t2, space0);
 
 StructuredBuffer<PrimitivePerFrameCB> g_PrimitivePerFrameCB : register(t3);
 
+StructuredBuffer<LightCB> g_LightCB : register(t4);
+
 ConstantBuffer<ScenePerFrameCB> g_ScenePerFrameCB : register(b0);
 
 SamplerState SamPointWrap : register(s0);
