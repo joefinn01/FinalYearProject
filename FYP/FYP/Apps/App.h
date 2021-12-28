@@ -31,8 +31,6 @@ struct FrameResources
 
 	UploadBuffer<PrimitivePerFrameCB>* m_pPrimitivePerFrameCBUpload = nullptr;
 	UploadBuffer<LightCB>* m_pLightCBUpload = nullptr;
-
-	UINT64 m_uiFenceValue = 0;
 };
 
 namespace GlobalRootSignatureParams
@@ -160,11 +158,6 @@ protected:
 	UploadBuffer<LightCB>* GetLightUploadBuffer();
 	UploadBuffer<LightCB>* GetLightUploadBuffer(int iIndex);
 
-	UINT64 GetFenceValue();
-	UINT64 GetFenceValue(int iIndex);
-
-	void IncrementFenceValue();
-
 	static App* m_pApp;
 
 	Timer m_Timer;
@@ -195,6 +188,8 @@ protected:
 	Descriptor* m_pOutputDesc;
 
 	UINT m_uiFrameIndex = 0;
+
+	UINT64 m_uiFenceValue = 0;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 

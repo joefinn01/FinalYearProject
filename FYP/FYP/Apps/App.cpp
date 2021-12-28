@@ -230,6 +230,10 @@ void App::Update(const Timer& kTimer)
 
 	ObjectManager::GetInstance()->GetActiveCamera()->Update(kTimer);
 
+	GameObject* pGameObject = ObjectManager::GetInstance()->GetGameObject("Fish");
+
+	pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
+
 	UpdatePerFrameCB(m_uiFrameIndex);
 
 	ObjectManager::GetInstance()->Update(kTimer);
@@ -820,10 +824,10 @@ bool App::InitDirectX3D()
 void App::FlushCommandQueue()
 {
 	// Advance the fence value to mark commands up to this fence point
-	IncrementFenceValue();
+	++m_uiFenceValue;
 
 	// Add an instruction to the command queue to set a new fence point
-	HRESULT hr = m_pCommandQueue->Signal(m_pFence.Get(), GetFenceValue());
+	HRESULT hr = m_pCommandQueue->Signal(m_pFence.Get(), m_uiFenceValue);
 
 	if (FAILED(hr))
 	{
@@ -833,7 +837,7 @@ void App::FlushCommandQueue()
 	}
 
 	// Wait until the GPU has completed commands up to this fence point.
-	if (m_pFence->GetCompletedValue() < GetFenceValue())
+	if (m_pFence->GetCompletedValue() < m_uiFenceValue)
 	{
 		HANDLE eventHandle = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
 
@@ -845,7 +849,7 @@ void App::FlushCommandQueue()
 		}
 
 		// Fire event when GPU hits current fence.  
-		hr = m_pFence->SetEventOnCompletion(GetFenceValue(), eventHandle);
+		hr = m_pFence->SetEventOnCompletion(m_uiFenceValue, eventHandle);
 
 		if (FAILED(hr))
 		{
@@ -979,7 +983,10 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "SciFiHelmet", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "Barramundi", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/Lantern/gLTF/Lantern.gltf", "Lantern", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1211,25 +1218,21 @@ bool App::CreateHitGroupShaderTable()
 
 				if (pNode->m_Primitives[i]->m_iAlbedoIndex != -1)
 				{
-
 					hitGroupRootArgs.AlbedoHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iAlbedoIndex)->GetDescriptor()->GetDescriptorIndex());
 				}
 
 				if (pNode->m_Primitives[i]->m_iNormalIndex != -1)
 				{
-
 					hitGroupRootArgs.NormalHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iNormalIndex)->GetDescriptor()->GetDescriptorIndex());
 				}
 
 				if (pNode->m_Primitives[i]->m_iMetallicRoughnessIndex != -1)
 				{
-
 					hitGroupRootArgs.MetallicRoughnessHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iMetallicRoughnessIndex)->GetDescriptor()->GetDescriptorIndex());
 				}
 
 				if (pNode->m_Primitives[i]->m_iOcclusionIndex != -1)
 				{
-
 					hitGroupRootArgs.OcclusionHandle = m_pSrvUavHeap->GetGpuDescriptorHandle(it->second->GetMesh()->GetTextures()->at(pNode->m_Primitives[i]->m_iOcclusionIndex)->GetDescriptor()->GetDescriptorIndex());
 				}
 
@@ -1348,10 +1351,25 @@ void App::CreateCameras()
 void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
-	MeshManager::GetInstance()->GetMesh("SciFiHelmet", pMesh);
+	MeshManager::GetInstance()->GetMesh("Barramundi", pMesh);
 
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Box1", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
+	pGameObject->Init("Fish", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
+
+	//MeshManager::GetInstance()->GetMesh("Lantern", pMesh);
+
+	//pGameObject = new GameObject();
+	//pGameObject->Init("Lantern", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(0.1f, 0.1f, 0.1f), pMesh);
+
+	//MeshManager::GetInstance()->GetMesh("BoomBox", pMesh);
+
+	//pGameObject = new GameObject();
+	//pGameObject->Init("BoomBox", XMFLOAT3(-5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
+
+	//MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
+
+	//pGameObject = new GameObject();
+	//pGameObject->Init("Sponza", XMFLOAT3(-5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
 
 	CreateCameras();
 
@@ -1636,21 +1654,6 @@ UploadBuffer<LightCB>* App::GetLightUploadBuffer()
 UploadBuffer<LightCB>* App::GetLightUploadBuffer(int iIndex)
 {
 	return m_FrameResources[iIndex].m_pLightCBUpload;
-}
-
-UINT64 App::GetFenceValue()
-{
-	return m_FrameResources[m_uiFrameIndex].m_uiFenceValue;
-}
-
-UINT64 App::GetFenceValue(int iIndex)
-{
-	return m_FrameResources[iIndex].m_uiFenceValue;
-}
-
-void App::IncrementFenceValue()
-{
-	++m_FrameResources[m_uiFrameIndex].m_uiFenceValue;
 }
 
 bool App::CreateSignatures()
