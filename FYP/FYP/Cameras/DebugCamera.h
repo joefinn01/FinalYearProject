@@ -13,6 +13,7 @@ protected:
 	bool m_bLockMouse = false;
 
 	float m_fMouseSensitivity = 1.0f;
+	float m_fMovementSpeed = 3.0f;
 
 	InputObserver m_InputObserver;
 

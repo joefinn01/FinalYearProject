@@ -91,22 +91,22 @@ void DebugCamera::OnKeyHeld(void* pObject, int iKeycode, const Timer& kTimer)
 	{
 	case 87:	//W
 	case VK_UP:
-		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetForwardVector()) * kTimer.DeltaTime() * 25.0f);
+		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetForwardVector()) * kTimer.DeltaTime() * pCamera->m_fMovementSpeed);
 		break;
 
 	case 83:
 	case VK_DOWN:
-		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetForwardVector()) * kTimer.DeltaTime() * -25.0f);
+		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetForwardVector()) * kTimer.DeltaTime() * -pCamera->m_fMovementSpeed);
 		break;
 
 	case 65:
 	case VK_LEFT:
-		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetRightVector()) * kTimer.DeltaTime() * 25.0f);
+		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetRightVector()) * kTimer.DeltaTime() * pCamera->m_fMovementSpeed);
 		break;
 
 	case 68:
 	case VK_RIGHT:
-		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetRightVector()) * kTimer.DeltaTime() * -25.0f);
+		XMStoreFloat3(&pCamera->m_Eye, XMLoadFloat3(&pCamera->m_Eye) + XMLoadFloat3(&pCamera->GetRightVector()) * kTimer.DeltaTime() * -pCamera->m_fMovementSpeed);
 		break;
 	default:
 		break;
