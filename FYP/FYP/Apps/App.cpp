@@ -234,6 +234,10 @@ void App::Update(const Timer& kTimer)
 
 	pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
 
+	pGameObject = ObjectManager::GetInstance()->GetGameObject("WaterBottle");
+
+	pGameObject->Rotate(0, 10.0f * kTimer.DeltaTime(), 0);
+
 	UpdatePerFrameCB(m_uiFrameIndex);
 
 	ObjectManager::GetInstance()->Update(kTimer);
@@ -984,9 +988,8 @@ void App::CreateGeometry()
 	}
 
 	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "Barramundi", m_pGraphicsCommandList.Get());
-	//MeshManager::GetInstance()->LoadMesh("Models/Lantern/gLTF/Lantern.gltf", "Lantern", m_pGraphicsCommandList.Get());
-	//MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
-	//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1356,20 +1359,15 @@ void App::InitScene()
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Fish", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
 
-	//MeshManager::GetInstance()->GetMesh("Lantern", pMesh);
+	MeshManager::GetInstance()->GetMesh("WaterBottle", pMesh);
 
-	//pGameObject = new GameObject();
-	//pGameObject->Init("Lantern", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(0.1f, 0.1f, 0.1f), pMesh);
+	pGameObject = new GameObject();
+	pGameObject->Init("WaterBottle", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(4.0f, 4.0f, 4.0f), pMesh);
 
-	//MeshManager::GetInstance()->GetMesh("BoomBox", pMesh);
+	MeshManager::GetInstance()->GetMesh("BoomBox", pMesh);
 
-	//pGameObject = new GameObject();
-	//pGameObject->Init("BoomBox", XMFLOAT3(-5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
-
-	//MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
-
-	//pGameObject = new GameObject();
-	//pGameObject->Init("Sponza", XMFLOAT3(-5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
+	pGameObject = new GameObject();
+	pGameObject->Init("BoomBox", XMFLOAT3(5, 0, -5), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
 
 	CreateCameras();
 
