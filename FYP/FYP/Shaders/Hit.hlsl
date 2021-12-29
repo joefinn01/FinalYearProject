@@ -116,9 +116,9 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     //Get primitive information from textures
     float3 albedo = pow(g_LocalAlbedo.SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
     float3 perPixelNormal = GetNormal(uv, normal, tangent);
-    float fMetallic = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).r;
+    float fMetallic = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).b;
     float fRoughness = g_LocalMetallicRoughness.SampleLevel(SamAnisotropicWrap, uv, 0).g;
-    float fOcclusion = g_LocalOcclusion.SampleLevel(SamPointWrap, uv, 0).r;
+    float fOcclusion = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).r;
     
     float3 outgoingRadiance = float3(0.0f, 0.0f, 0.0f);
     
