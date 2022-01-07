@@ -14,7 +14,7 @@ Mesh::Mesh()
 
 	m_pVertexBuffer = nullptr;
 	m_pIndexBuffer = nullptr;
-	m_RootNodes = std::vector<MeshNode*>();
+	m_Nodes = std::vector<MeshNode*>();
 
 	m_uiNumIndices = 0;
 	m_uiNumVertices = 0;
@@ -24,30 +24,15 @@ bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vec
 {
 	ID3D12Device5* pDevice = (ID3D12Device5*)App::GetApp()->GetDevice();
 
-	std::queue<MeshNode*> meshNodes;
-
-	for (int i = 0; i < m_RootNodes.size(); ++i)
-	{
-		meshNodes.push(m_RootNodes[i]);
-	}
-
-	MeshNode* pNode;
 	Primitive* pPrimitive;
 
 	std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
 
-	while (meshNodes.size() != 0)
+	MeshNode* pNode;
+
+	for (int i = 0;i < m_Nodes.size(); ++i)
 	{
-		//get reference and then remove node from vector
-		pNode = meshNodes.front();
-
-		meshNodes.pop();
-
-		//Push child mesh nodes into vector
-		for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
-		{
-			meshNodes.push(pNode->m_ChildNodes[i]);
-		}
+		pNode = m_Nodes[i];
 
 		if (pNode->m_Primitives.size() == 0)
 		{
@@ -140,9 +125,14 @@ UploadBuffer<UINT16>* Mesh::GetIndexUploadBuffer()
 	return m_pIndexBuffer;
 }
 
-std::vector<MeshNode*>* Mesh::GetRootNodes()
+std::vector<MeshNode*>* Mesh::GetNodes()
 {
-	return &m_RootNodes;
+	return &m_Nodes;
+}
+
+const MeshNode* Mesh::GetNode(int iIndex) const
+{
+	return m_Nodes[iIndex];
 }
 
 UINT16 Mesh::GetNumVertices() const

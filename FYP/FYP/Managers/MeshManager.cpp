@@ -18,28 +18,16 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 {
 	UINT uiIndex;
 
-	MeshNode* pNode;
-
-	std::queue<MeshNode*> meshNodes;
+	const MeshNode* pNode;
 
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{
-		for (int i = 0; i < it->second->GetRootNodes()->size(); ++i)
+
+
+
+		for (int i = 0; i < it->second->GetNodes()->size(); ++i)
 		{
-			meshNodes.push(it->second->GetRootNodes()->at(i));
-		}
-
-		while (meshNodes.empty() == false)
-		{
-			pNode = meshNodes.front();
-
-			meshNodes.pop();
-
-			//Push child nodes to queue
-			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
-			{
-				meshNodes.push(pNode->m_ChildNodes[i]);
-			}
+			pNode = it->second->GetNode(i);
 
 			//create descriptors per primitive
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
@@ -304,10 +292,8 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 	{
 		pParentNode->m_ChildNodes.push_back(pNode);
 	}
-	else
-	{
-		pMesh->m_RootNodes.push_back(pNode);
-	}
+
+	pMesh->m_Nodes.push_back(pNode);
 
 	return true;
 }

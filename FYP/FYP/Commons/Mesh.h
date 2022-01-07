@@ -84,7 +84,8 @@ public:
 	UploadBuffer<Vertex>* GetVertexUploadBuffer();
 	UploadBuffer<UINT16>* GetIndexUploadBuffer();
 
-	std::vector<MeshNode*>* GetRootNodes();
+	std::vector<MeshNode*>* GetNodes();
+	const MeshNode* GetNode(int iIndex) const;
 
 	UINT16 GetNumVertices() const;
 	UINT16 GetNumIndices() const;
@@ -97,7 +98,7 @@ private:
 	UploadBuffer<Vertex>* m_pVertexBuffer;
 	UploadBuffer<UINT16>* m_pIndexBuffer;
 
-	std::vector<MeshNode*> m_RootNodes;
+	std::vector<MeshNode*> m_Nodes;
 
 	UINT16 m_uiNumVertices;
 	UINT16 m_uiNumIndices;

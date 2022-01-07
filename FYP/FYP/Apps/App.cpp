@@ -1188,31 +1188,16 @@ bool App::CreateHitGroupShaderTable()
 
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
-	MeshNode* pNode;
+	const MeshNode* pNode;
 	Mesh* pMesh;
-
-	std::queue<MeshNode*> meshNodes;
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
 		pMesh = it->second->GetMesh();
 
-		for (int i = 0; i < pMesh->GetRootNodes()->size(); ++i)
+		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
 		{
-			meshNodes.push(pMesh->GetRootNodes()->at(i));
-		}
-
-		while (meshNodes.empty() == false)
-		{
-			pNode = meshNodes.front();
-
-			meshNodes.pop();
-
-			//Push child nodes to queue
-			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
-			{
-				meshNodes.push(pNode->m_ChildNodes[i]);
-			}
+			pNode = pMesh->GetNode(i);
 
 			//Assign per primitive information
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
@@ -1410,10 +1395,8 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 	//Update primitive per frame constant buffers
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
-	MeshNode* pNode;
+	const MeshNode* pNode;
 	Mesh* pMesh;
-
-	std::queue<MeshNode*> meshNodes;
 
 	XMMATRIX invWorld;
 
@@ -1421,22 +1404,9 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 	{
 		pMesh = it->second->GetMesh();
 
-		for (int i = 0; i < pMesh->GetRootNodes()->size(); ++i)
+		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
 		{
-			meshNodes.push(pMesh->GetRootNodes()->at(i));
-		}
-
-		while (meshNodes.empty() == false)
-		{
-			pNode = meshNodes.front();
-
-			meshNodes.pop();
-
-			//Push child nodes to queue
-			for (int i = 0; i < pNode->m_ChildNodes.size(); ++i)
-			{
-				meshNodes.push(pNode->m_ChildNodes[i]);
-			}
+			pNode = pMesh->GetNode(i);
 
 			//Assign per primitive information
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
