@@ -10,6 +10,23 @@ class Descriptor;
 
 struct Vertex;
 
+enum class PrimitiveAttributes : UINT8
+{
+	NORMAL = 1,
+	OCCLUSION = 2,
+	EMISSIVE = 4
+};
+
+inline PrimitiveAttributes operator|(PrimitiveAttributes a, PrimitiveAttributes b)
+{
+	return static_cast<PrimitiveAttributes>(static_cast<UINT8>(a) | static_cast<UINT8>(b));
+}
+
+inline PrimitiveAttributes operator&(PrimitiveAttributes a, PrimitiveAttributes b)
+{
+	return static_cast<PrimitiveAttributes>(static_cast<UINT8>(a) & static_cast<UINT8>(b));
+}
+
 struct Primitive
 {
 	Primitive()
@@ -24,8 +41,17 @@ struct Primitive
 		m_iMetallicRoughnessIndex = 0;
 		m_iOcclusionIndex = 0;
 
+		m_iIndex = -1;
+
 		m_pIndexDesc = nullptr;
 		m_pVertexDesc = nullptr;
+
+		m_Attributes = (PrimitiveAttributes)0;
+	}
+
+	bool HasAttribute(PrimitiveAttributes primAttribute)
+	{
+		return (UINT8)m_Attributes & (UINT8)primAttribute;
 	}
 
 	Descriptor* m_pIndexDesc;
@@ -41,6 +67,8 @@ struct Primitive
 	int m_iNormalIndex;
 	int m_iMetallicRoughnessIndex;
 	int m_iOcclusionIndex;
+
+	PrimitiveAttributes m_Attributes = (PrimitiveAttributes)0;
 };
 
 struct MeshNode

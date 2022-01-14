@@ -225,7 +225,9 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			UINT uiTexCoordStride;
 			UINT uiTangentStride;
 
-			if (GetVertexData(kModel, kPrimitive, &kpfPositionBuffer, &uiPositionStride, &kpfNormalBuffer, &uiNormalStride, &kpfTexCoordBuffer, &uiTexCoordStride, &kpfTangentBuffer, &uiTangentStride, &uiVertexCount) == false)
+			Primitive* pPrimitive = new Primitive();
+
+			if (GetVertexData(kModel, kPrimitive, &kpfPositionBuffer, &uiPositionStride, &kpfNormalBuffer, &uiNormalStride, &kpfTexCoordBuffer, &uiTexCoordStride, &kpfTangentBuffer, &uiTangentStride, &uiVertexCount, pPrimitive) == false)
 			{
 				return false;
 			}
@@ -272,8 +274,6 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			}
 			//kPrimitive
 
-
-			Primitive* pPrimitive = new Primitive();
 			pPrimitive->m_uiFirstIndex = uiIndexStart;
 			pPrimitive->m_uiFirstVertex = uiVertexStart;
 			pPrimitive->m_uiNumIndices = uiIndexCount;
@@ -283,6 +283,11 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			pPrimitive->m_iMetallicRoughnessIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.metallicRoughnessTexture.index;
 			pPrimitive->m_iOcclusionIndex = kModel.materials[kPrimitive.material].occlusionTexture.index;
 			pPrimitive->m_iIndex = m_uiNumPrimitives - kMesh.primitives.size() + i;
+
+			if (pPrimitive->m_iOcclusionIndex != -1)
+			{
+				pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::OCCLUSION;
+			}
 
 			pNode->m_Primitives.push_back(pPrimitive);
 		}
@@ -410,19 +415,9 @@ bool MeshManager::RemoveMesh(std::string sName)
 	return true;
 }
 
-bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT16* puiVertexCount)
+bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT16* puiVertexCount, Primitive* pPrimitive)
 {
 	if (GetAttributeData(kModel, kPrimitive, "POSITION", kppfPositionBuffer, puiPositionStride, puiVertexCount, TINYGLTF_TYPE_VEC3) == false)
-	{
-		return false;
-	}
-
-	if (GetAttributeData(kModel, kPrimitive, "NORMAL", kppfNormalBuffer, puiNormalStride, nullptr, TINYGLTF_TYPE_VEC3) == false)
-	{
-		return false;
-	}
-
-	if (GetAttributeData(kModel, kPrimitive, "TANGENT", kppfTangentBuffer, puiTangentStride, nullptr, TINYGLTF_TYPE_VEC4) == false)
 	{
 		return false;
 	}
@@ -430,6 +425,18 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 	if (GetAttributeData(kModel, kPrimitive, "TEXCOORD_0", kppfTexCoordBuffer, puiTexCoordStride, nullptr, TINYGLTF_TYPE_VEC2) == false)
 	{
 		return false;
+	}
+
+	if (GetAttributeData(kModel, kPrimitive, "NORMAL", kppfNormalBuffer, puiNormalStride, nullptr, TINYGLTF_TYPE_VEC3) == true)
+	{
+		//has normal map so enable bit
+		pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::NORMAL;
+	}
+
+	if (GetAttributeData(kModel, kPrimitive, "TANGENT", kppfTangentBuffer, puiTangentStride, nullptr, TINYGLTF_TYPE_VEC4) == true)
+	{
+		//has normal map so enable bit
+		pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::NORMAL;
 	}
 
 	return true;
