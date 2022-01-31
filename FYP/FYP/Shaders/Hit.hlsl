@@ -77,7 +77,18 @@ Ray GenerateCameraRay(uint2 index, float3 eyePosW, float4x4 InvViewProjection)
 }
 
 [shader("closesthit")]
+
+#if NORMAL_MAPPING && OCCLUSION_MAPPING && EMISSION_MAPPING
+void ClosestHitNormalOcclusionEmission(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#elif NORMAL_MAPPING && OCCLUSION_MAPPING
+void ClosestHitNormalOcclusion(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#elif NORMAL_MAPPING
+void ClosestHitNormal(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#elif OCCLUSION_MAPPING
+void ClosestHitOcclusion(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#else
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#endif
 {
     float3 hitPosW = HitWoldPosition();
     float3 viewW = normalize(g_ScenePerFrameCB.EyePosW.xyz - hitPosW);
@@ -100,6 +111,14 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     float3 normal = InterpolateAttribute(normals, attr);
     
+    //Calculate hit pos UV coords
+    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    float2 uv = bary.x * Vertices[indexes[0]].TexCoords + bary.y * Vertices[indexes[1]].TexCoords + bary.z * Vertices[indexes[2]].TexCoords;
+
+    //Get primitive information from textures
+    float3 albedo = pow(g_LocalAlbedo.SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
+    
+#if NORMAL_MAPPING
     float3 tangents[3] =
     {
         Vertices[indexes[0]].Tangent.xyz,
@@ -109,16 +128,16 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     float3 tangent = InterpolateAttribute(tangents, attr);
     
-    //Calculate hit pos UV coords
-    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    float2 uv = bary.x * Vertices[indexes[0]].TexCoords + bary.y * Vertices[indexes[1]].TexCoords + bary.z * Vertices[indexes[2]].TexCoords;
-
-    //Get primitive information from textures
-    float3 albedo = pow(g_LocalAlbedo.SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
     float3 perPixelNormal = GetNormal(uv, normal, tangent);
+#else
+    float3 perPixelNormal = normal;
+#endif
     float fMetallic = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).b;
     float fRoughness = g_LocalMetallicRoughness.SampleLevel(SamAnisotropicWrap, uv, 0).g;
+    
+#if OCCLUSION_MAPPING
     float fOcclusion = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).r;
+#endif
     
     float3 outgoingRadiance = float3(0.0f, 0.0f, 0.0f);
     
@@ -153,7 +172,12 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         outgoingRadiance += ((fKD * albedo / PI) + specular) * radiance * fNormDotLight;
     }
 
+#if OCCLUSION_MAPPING
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * fOcclusion * albedo) + outgoingRadiance, 1.0f);
+    //payload.color = float4((float3(0.03f, 0.03f, 0.03f) * albedo) + outgoingRadiance, 1.0f);
+#else
+    payload.color = float4((float3(0.03f, 0.03f, 0.03f) * albedo) + outgoingRadiance, 1.0f);
+#endif
     
     //Map and gamma correct
     float fMapping = 1.0f / 2.2f;

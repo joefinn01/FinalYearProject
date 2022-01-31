@@ -100,6 +100,10 @@ protected:
 	
 	bool CreateStateObject();
 
+	void AssociateShader(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc);
+
+	void CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc, D3D12_HIT_GROUP_TYPE hitGroupType = D3D12_HIT_GROUP_TYPE_TRIANGLES);
+
 	bool CompileShaders();
 
 	void CreateGeometry();
@@ -218,10 +222,24 @@ protected:
 
 	UINT m_uiNumLights = 0;
 
+	//shader stuff
 	LPCWSTR m_kwsRayGenName = L"RayGen";
-	LPCWSTR m_kwsClosestHitName = L"ClosestHit";
+
 	LPCWSTR m_kwsMissName = L"Miss";
+
+	LPCWSTR m_kwsClosestHitEntrypoint = L"ClosestHit";
+
+	LPCWSTR m_kwsClosestHitName = L"ClosestHit";
+	LPCWSTR m_kwsClosestHitNameNormal = L"ClosestHitNormal";
+	LPCWSTR m_kwsClosestHitNameOcclusion = L"ClosestHitOcclusion";
+	LPCWSTR m_kwsClosestHitNameNormalOcclusion = L"ClosestHitNormalOcclusion";
+	LPCWSTR m_kwsClosestHitNameNormalOcclusionEmission = L"ClosestHitNormalOcclusionEmission";
+
 	LPCWSTR m_kwsHitGroupName = L"HitGroup";
+	LPCWSTR m_kwsHitGroupNameNormal = L"HitGroupNormal";
+	LPCWSTR m_kwsHitGroupNameOcclusion = L"HitGroupOcclusion";
+	LPCWSTR m_kwsHitGroupNameNormalOcclusion = L"HitGroupNormalOcclusion";
+	LPCWSTR m_kwsHitGroupNameNormalOcclusionEmission = L"HitGroupNormalOcclusionEmission";
 
 	bool m_b4xMSAAState = false;
 	UINT m_uiMSAAQuality = 0;

@@ -2,6 +2,9 @@
 
 #include "Commons/UploadBuffer.h"
 #include "Commons/AccelerationBuffers.h"
+#include "Helpers/DXRHelper.h"
+#include "Helpers/DebugHelper.h"
+#include "Shaders/Vertices.h"
 
 #include <vector>
 
@@ -54,13 +57,63 @@ struct Primitive
 		return (UINT8)m_Attributes & (UINT8)primAttribute;
 	}
 
+	bool CreateBLAS(ID3D12GraphicsCommandList4*& pGraphicsCommandList, UploadBuffer<Vertex>*& pVertexBuffer, UploadBuffer<UINT16>*& pIndexBuffer, ID3D12Device5*& pDevice)
+	{
+		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
+		geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+		geomDesc.Triangles.IndexBuffer = pIndexBuffer->GetBufferGPUAddress(m_uiFirstIndex);
+		geomDesc.Triangles.IndexCount = m_uiNumIndices;
+		geomDesc.Triangles.Transform3x4 = 0;
+		geomDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
+		geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+		geomDesc.Triangles.VertexCount = m_uiNumVertices;
+		geomDesc.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetBufferGPUAddress(m_uiFirstVertex);
+		geomDesc.Triangles.VertexBuffer.StrideInBytes = sizeof(Vertex);
+		geomDesc.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+		inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+		inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+		inputs.NumDescs = 1;
+		inputs.pGeometryDescs = &geomDesc;
+		inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+		pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+
+		if (DXRHelper::CreateUAVBuffer(pDevice, info.ScratchDataSizeInBytes, m_BottomLevel.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
+		{
+			LOG_ERROR(L"Primitive", L"Failed to create the bottom level acceleration structure scratch buffer!");
+
+			return false;
+		}
+
+		if (DXRHelper::CreateUAVBuffer(pDevice, info.ResultDataMaxSizeInBytes, m_BottomLevel.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
+		{
+			LOG_ERROR(L"Primitive", L"Failed to create the bottom level acceleration structure result buffer!");
+
+			return false;
+		}
+
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+		buildDesc.Inputs = inputs;
+		buildDesc.DestAccelerationStructureData = m_BottomLevel.m_pResult->GetGPUVirtualAddress();
+		buildDesc.ScratchAccelerationStructureData = m_BottomLevel.m_pScratch->GetGPUVirtualAddress();
+
+		pGraphicsCommandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+		pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_BottomLevel.m_pResult.Get()));
+
+		return true;
+	}
+
 	Descriptor* m_pIndexDesc;
 	Descriptor* m_pVertexDesc;
 
-	UINT16 m_uiFirstIndex;
-	UINT16 m_uiFirstVertex;
-	UINT16 m_uiNumIndices;
-	UINT16 m_uiNumVertices;
+	UINT m_uiFirstIndex;
+	UINT m_uiFirstVertex;
+	UINT m_uiNumIndices;
+	UINT m_uiNumVertices;
 
 	int m_iIndex;
 	int m_iAlbedoIndex;
@@ -69,6 +122,8 @@ struct Primitive
 	int m_iOcclusionIndex;
 
 	PrimitiveAttributes m_Attributes = (PrimitiveAttributes)0;
+
+	AccelerationBuffers m_BottomLevel;
 };
 
 struct MeshNode
@@ -104,8 +159,7 @@ class Mesh
 public:
 	Mesh();
 
-	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers);
-	AccelerationBuffers* GetBLAS();
+	bool CreateBLAS(ID3D12GraphicsCommandList4*& pGraphicsCommandList, ID3D12Device5*& pDevice);
 
 	std::vector<Texture*>* GetTextures();
 
@@ -115,8 +169,8 @@ public:
 	std::vector<MeshNode*>* GetNodes();
 	const MeshNode* GetNode(int iIndex) const;
 
-	UINT16 GetNumVertices() const;
-	UINT16 GetNumIndices() const;
+	UINT GetNumVertices() const;
+	UINT GetNumIndices() const;
 
 protected:
 
@@ -128,10 +182,8 @@ private:
 
 	std::vector<MeshNode*> m_Nodes;
 
-	UINT16 m_uiNumVertices;
-	UINT16 m_uiNumIndices;
-
-	AccelerationBuffers m_BottomLevel;
+	UINT m_uiNumVertices;
+	UINT m_uiNumIndices;
 
 	friend class MeshManager;
 };
