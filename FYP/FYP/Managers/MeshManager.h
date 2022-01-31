@@ -45,17 +45,17 @@ public:
 
 	std::unordered_map<std::string, Mesh*>* GetMeshes();
 
-	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers);
+	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, ID3D12Device5* pDevice);
 
 	UINT GetNumPrimitives() const;
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT16>* pIndexBuffer);
 
-	bool GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT16* puiVertexCount, Primitive* pPrimitive);
-	bool GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT16* puiIndexCount, const UINT16& kuiVertexStart);
+	bool GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT* puiVertexCount, Primitive* pPrimitive);
+	bool GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT* puiIndexCount);
 
-	bool GetAttributeData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::string sAttribName, const float** kppfBuffer, UINT* puiStride, UINT16* puiCount, uint32_t uiType);
+	bool GetAttributeData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::string sAttribName, const float** kppfBuffer, UINT* puiStride, UINT* puiCount, uint32_t uiType);
 
 	bool LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList);
 

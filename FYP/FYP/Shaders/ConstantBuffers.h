@@ -37,7 +37,7 @@ struct PrimitivePerFrameCB
 struct PrimitiveInstanceCB
 {
 	int InstanceIndex;
-	XMFLOAT3 pad;
+	int pad;
 };
 
 #endif // CONSTANT_BUFFERS_H

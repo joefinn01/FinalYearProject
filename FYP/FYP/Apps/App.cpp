@@ -234,9 +234,9 @@ void App::Update(const Timer& kTimer)
 
 	pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
 
-	pGameObject = ObjectManager::GetInstance()->GetGameObject("WaterBottle");
+	//pGameObject = ObjectManager::GetInstance()->GetGameObject("WaterBottle");
 
-	pGameObject->Rotate(0, 10.0f * kTimer.DeltaTime(), 0);
+	//pGameObject->Rotate(0, 10.0f * kTimer.DeltaTime(), 0);
 
 	UpdatePerFrameCB(m_uiFrameIndex);
 
@@ -873,28 +873,22 @@ bool App::CreateStateObject()
 	CD3DX12_STATE_OBJECT_DESC pipelineDesc = CD3DX12_STATE_OBJECT_DESC(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
 
 	//Associate shaders with pipeline
+	AssociateShader(m_kwsRayGenName, m_kwsRayGenName, pipelineDesc);
 
-	IDxcBlob* pBlob = m_Shaders[m_kwsRayGenName].Get();
+	AssociateShader(m_kwsMissName, m_kwsMissName, pipelineDesc);
 
-	CD3DX12_DXIL_LIBRARY_SUBOBJECT* pRayGenLib = pipelineDesc.CreateSubobject<CD3DX12_DXIL_LIBRARY_SUBOBJECT>();
-	pRayGenLib->SetDXILLibrary(&CD3DX12_SHADER_BYTECODE((void*)pBlob->GetBufferPointer(), pBlob->GetBufferSize()));
-	pRayGenLib->DefineExport(m_kwsRayGenName);
+	AssociateShader(m_kwsClosestHitName, m_kwsClosestHitName, pipelineDesc);
+	AssociateShader(m_kwsClosestHitNameNormal, m_kwsClosestHitNameNormal, pipelineDesc);
+	AssociateShader(m_kwsClosestHitNameOcclusion, m_kwsClosestHitNameOcclusion, pipelineDesc);
+	AssociateShader(m_kwsClosestHitNameNormalOcclusion, m_kwsClosestHitNameNormalOcclusion, pipelineDesc);
+	AssociateShader(m_kwsClosestHitNameNormalOcclusionEmission, m_kwsClosestHitNameNormalOcclusionEmission, pipelineDesc);
 
-	pBlob = m_Shaders[m_kwsMissName].Get();
-	CD3DX12_DXIL_LIBRARY_SUBOBJECT* pMissLib = pipelineDesc.CreateSubobject<CD3DX12_DXIL_LIBRARY_SUBOBJECT>();
-	pMissLib->SetDXILLibrary(&CD3DX12_SHADER_BYTECODE((void*)pBlob->GetBufferPointer(), pBlob->GetBufferSize()));
-	pMissLib->DefineExport(m_kwsMissName);
-
-	pBlob = m_Shaders[m_kwsClosestHitName].Get();
-	CD3DX12_DXIL_LIBRARY_SUBOBJECT* pClosestHitLib = pipelineDesc.CreateSubobject<CD3DX12_DXIL_LIBRARY_SUBOBJECT>();
-	pClosestHitLib->SetDXILLibrary(&CD3DX12_SHADER_BYTECODE((void*)pBlob->GetBufferPointer(), pBlob->GetBufferSize()));
-	pClosestHitLib->DefineExport(m_kwsClosestHitName);
-
-	//Add a hit group
-	CD3DX12_HIT_GROUP_SUBOBJECT* pHitGroup = pipelineDesc.CreateSubobject<CD3DX12_HIT_GROUP_SUBOBJECT>();
-	pHitGroup->SetClosestHitShaderImport(m_kwsClosestHitName);
-	pHitGroup->SetHitGroupExport(m_kwsHitGroupName);
-	pHitGroup->SetHitGroupType(D3D12_HIT_GROUP_TYPE_TRIANGLES);
+	//Add a hit groups
+	CreateHitGroup(m_kwsClosestHitName, m_kwsHitGroupName, pipelineDesc);
+	CreateHitGroup(m_kwsClosestHitNameNormal, m_kwsHitGroupNameNormal, pipelineDesc);
+	CreateHitGroup(m_kwsClosestHitNameOcclusion, m_kwsHitGroupNameOcclusion, pipelineDesc);
+	CreateHitGroup(m_kwsClosestHitNameNormalOcclusion, m_kwsHitGroupNameNormalOcclusion, pipelineDesc);
+	CreateHitGroup(m_kwsClosestHitNameNormalOcclusionEmission, m_kwsHitGroupNameNormalOcclusionEmission, pipelineDesc);
 
 	//Do shader config stuff
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT* pShaderConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
@@ -909,6 +903,10 @@ bool App::CreateStateObject()
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT* pAssociation = pipelineDesc.CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
 	pAssociation->SetSubobjectToAssociate(*pLocalRootSignature);
 	pAssociation->AddExport(m_kwsHitGroupName);
+	pAssociation->AddExport(m_kwsHitGroupNameNormal);
+	pAssociation->AddExport(m_kwsHitGroupNameOcclusion);
+	pAssociation->AddExport(m_kwsHitGroupNameNormalOcclusion);
+	pAssociation->AddExport(m_kwsHitGroupNameNormalOcclusionEmission);
 
 	//Global
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
@@ -939,6 +937,23 @@ bool App::CreateStateObject()
 	return true;
 }
 
+void App::AssociateShader(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc)
+{
+	IDxcBlob* pBlob = m_Shaders[shaderName].Get();
+
+	CD3DX12_DXIL_LIBRARY_SUBOBJECT* pLib = pipelineDesc.CreateSubobject<CD3DX12_DXIL_LIBRARY_SUBOBJECT>();
+	pLib->SetDXILLibrary(&CD3DX12_SHADER_BYTECODE((void*)pBlob->GetBufferPointer(), pBlob->GetBufferSize()));
+	pLib->DefineExport(shaderExport);
+}
+
+void App::CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport,  CD3DX12_STATE_OBJECT_DESC& pipelineDesc, D3D12_HIT_GROUP_TYPE hitGroupType)
+{
+	CD3DX12_HIT_GROUP_SUBOBJECT* pHitGroup = pipelineDesc.CreateSubobject<CD3DX12_HIT_GROUP_SUBOBJECT>();
+	pHitGroup->SetClosestHitShaderImport(shaderName);
+	pHitGroup->SetHitGroupExport(shaderExport);
+	pHitGroup->SetHitGroupType(hitGroupType);
+}
+
 bool App::CompileShaders()
 {
 	ComPtr<IDxcBlob> pBlob;
@@ -964,7 +979,33 @@ bool App::CompileShaders()
 	m_Shaders[m_kwsMissName] = pBlob.Get();
 
 	//Compile closest hit shaders
-	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl");
+
+	//Create different preprocessor define configs.
+	DxcDefine normal[] =
+	{
+		L"NORMAL_MAPPING", L"1",
+	};
+
+	DxcDefine occlusion[] =
+	{
+		L"OCCLUSION_MAPPING", L"1",
+	};
+
+	DxcDefine normalOcclusion[] =
+	{
+		L"NORMAL_MAPPING", L"1",
+		L"OCCLUSION_MAPPING", L"1"
+	};
+
+	DxcDefine normalOcclusionEmission[] =
+	{
+		L"NORMAL_MAPPING", L"1",
+		L"OCCLUSION_MAPPING", L"1",
+		L"EMISSION_MAPPING", L"1"
+	};
+
+	//Nothing
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint);
 
 	if (pBlob == nullptr)
 	{
@@ -972,6 +1013,46 @@ bool App::CompileShaders()
 	}
 
 	m_Shaders[m_kwsClosestHitName] = pBlob.Get();
+
+	//Just normal mapping
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint, normal, _countof(normal));
+
+	if (pBlob == nullptr)
+	{
+		return false;
+	}
+
+	m_Shaders[m_kwsClosestHitNameNormal] = pBlob.Get();
+
+	//Just occlusion mapping
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint, occlusion, _countof(occlusion));
+
+	if (pBlob == nullptr)
+	{
+		return false;
+	}
+
+	m_Shaders[m_kwsClosestHitNameOcclusion] = pBlob.Get();
+
+	//normal and occlusion mapping
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint, normalOcclusion, _countof(normalOcclusion));
+
+	if (pBlob == nullptr)
+	{
+		return false;
+	}
+
+	m_Shaders[m_kwsClosestHitNameNormalOcclusion] = pBlob.Get();
+
+	//normal, occlusion and emission mapping
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint, normalOcclusionEmission, _countof(normalOcclusionEmission));
+
+	if (pBlob == nullptr)
+	{
+		return false;
+	}
+
+	m_Shaders[m_kwsClosestHitNameNormalOcclusionEmission] = pBlob.Get();
 
 	return true;
 }
@@ -990,6 +1071,7 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/BarramundiFish/gLTF/BarramundiFish.gltf", "Barramundi", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/BrainStem/gLTF/BrainStem.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
 	ExecuteCommandList();
 }
@@ -1005,9 +1087,7 @@ bool App::CreateAccelerationStructures()
 		return false;
 	}
 
-	std::vector<UploadBuffer<XMFLOAT3X4>*> uploadBuffers;
-
-	if (MeshManager::GetInstance()->CreateBLAS(m_pGraphicsCommandList.Get(), uploadBuffers) == false)
+	if (MeshManager::GetInstance()->CreateBLAS(m_pGraphicsCommandList.Get(), m_pDevice.Get()) == false)
 	{
 		return false;
 	}
@@ -1019,11 +1099,6 @@ bool App::CreateAccelerationStructures()
 
 	ExecuteCommandList();
 
-	for (int i = 0; i < uploadBuffers.size(); ++i)
-	{
-		delete uploadBuffers[i];
-	}
-
 	return true;
 }
 
@@ -1032,7 +1107,7 @@ bool App::CreateTLAS(bool bUpdate)
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-	inputs.NumDescs = ObjectManager::GetInstance()->GetNumGameObjects();
+	inputs.NumDescs = MeshManager::GetInstance()->GetNumPrimitives();
 	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
@@ -1058,37 +1133,62 @@ bool App::CreateTLAS(bool bUpdate)
 			return false;
 		}
 		 
-		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), ObjectManager::GetInstance()->GetNumGameObjects(), false);
+		std::vector<MeshNode*>* pMeshNodes;
+
+		int iPrimitiveCount = 0;
+
+		for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
+		{
+			pMeshNodes = it->second->GetMesh()->GetNodes();
+
+			for (int i = 0; i < pMeshNodes->size(); ++i)
+			{
+				iPrimitiveCount += pMeshNodes->at(i)->m_Primitives.size();
+			}
+		}
+
+		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), iPrimitiveCount, false);
 	}
 
 	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress(0);
 
 	int iCount = 0;
 
+	std::vector<MeshNode*>* pMeshNodes;
+
+	XMFLOAT3X4 world;
+
 	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
 	{
-		XMFLOAT3X4 world = it->second->Get3X4WorldMatrix();
+		pMeshNodes = it->second->GetMesh()->GetNodes();
 
-		D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-
-		for (int j = 0; j < 3; ++j)
+		for (int i = 0; i < pMeshNodes->size(); ++i)
 		{
-			for (int k = 0; k < 4; ++k)
+			for (int j = 0; j < pMeshNodes->at(i)->m_Primitives.size(); ++j)
 			{
-				instanceDesc.Transform[j][k] = world.m[j][k];
+				D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
+
+				XMStoreFloat3x4(&world, XMMatrixMultiply(XMLoadFloat4x4(&pMeshNodes->at(i)->m_Transform), XMLoadFloat4x4(&it->second->GetWorldMatrix())));
+
+				for (int j = 0; j < 3; ++j)
+				{
+					for (int k = 0; k < 4; ++k)
+					{
+						instanceDesc.Transform[j][k] = world.m[j][k];
+					}
+				}
+
+				instanceDesc.AccelerationStructure = pMeshNodes->at(i)->m_Primitives[j]->m_BottomLevel.m_pResult->GetGPUVirtualAddress();
+				instanceDesc.Flags = 0;
+				instanceDesc.InstanceID = iCount;
+				instanceDesc.InstanceContributionToHitGroupIndex = iCount;
+				instanceDesc.InstanceMask = 0xFF;
+
+				m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
+
+				++iCount;
 			}
 		}
-
-		instanceDesc.InstanceMask = 1;
-		instanceDesc.AccelerationStructure = it->second->GetMesh()->GetBLAS()->m_pResult->GetGPUVirtualAddress();
-		instanceDesc.Flags = 0;
-		instanceDesc.InstanceID = iCount;
-		instanceDesc.InstanceContributionToHitGroupIndex = iCount;
-		instanceDesc.InstanceMask = 0xFF;
-
-		m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
-
-		++iCount;
 	}
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
@@ -1170,7 +1270,7 @@ bool App::CreateMissShaderTable()
 
 bool App::CreateHitGroupShaderTable()
 {
-	void* pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupName);
+	void* pHitGroupIdentifier = nullptr;
 
 	struct HitGroupRootArgs
 	{
@@ -1184,7 +1284,7 @@ bool App::CreateHitGroupShaderTable()
 
 	HitGroupRootArgs hitGroupRootArgs;
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(hitGroupRootArgs));
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
 
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
@@ -1226,7 +1326,28 @@ bool App::CreateHitGroupShaderTable()
 
 				hitGroupRootArgs.Cb.InstanceIndex = pNode->m_Primitives[i]->m_iIndex;
 
-				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(hitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+				if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::EMISSIVE))
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormalOcclusionEmission);
+				}
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION))
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormalOcclusion);
+				}
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL))
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormal);
+				}
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION))
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameOcclusion);
+				}
+				else
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupName);
+				}
+
+				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 				{
 					LOG_ERROR(tag, L"Failed to add a hit group shader record!");
 
@@ -1361,14 +1482,15 @@ void App::InitScene()
 
 void App::InitConstantBuffers()
 {
-	m_uiNumLights = 2;
+	m_uiNumLights = 1;
 
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		UpdatePerFrameCB(i);
 	}
 
-	m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
+	//m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
+	m_LightCBs[0].Color = XMFLOAT4(0.93f, 0.19f, 0.14f, 1);
 	m_LightCBs[0].Position = XMFLOAT3(0, 0, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
 

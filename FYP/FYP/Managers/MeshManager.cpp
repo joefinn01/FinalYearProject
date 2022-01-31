@@ -208,10 +208,10 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 		for (UINT i = 0; i < kMesh.primitives.size(); ++i)
 		{
 			const tinygltf::Primitive& kPrimitive = kMesh.primitives[i];
-			UINT16 uiIndexStart = (UINT16)pIndexBuffer->size();
-			UINT16 uiVertexStart = (UINT16)pVertexBuffer->size();
-			UINT16 uiIndexCount = 0;
-			UINT16 uiVertexCount = 0;
+			UINT uiIndexStart = (UINT)pIndexBuffer->size();
+			UINT uiVertexStart = (UINT)pVertexBuffer->size();
+			UINT uiIndexCount = 0;
+			UINT uiVertexCount = 0;
 			bool bHasIndices = kPrimitive.indices >= 0;
 
 			//Vertex information buffers
@@ -258,7 +258,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 			if (bHasIndices == true)
 			{
-				if (GetIndexData(kModel, kPrimitive, pIndexBuffer, &uiIndexCount, uiVertexStart) == false)
+				if (GetIndexData(kModel, kPrimitive, pIndexBuffer, &uiIndexCount) == false)
 				{
 					return false;
 				}
@@ -269,10 +269,9 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 				for (int i = 0; i < uiIndexCount; ++i)
 				{
-					pIndexBuffer->push_back(i + uiVertexStart);
+					pIndexBuffer->push_back((UINT16)(i + uiVertexStart));
 				}
 			}
-			//kPrimitive
 
 			pPrimitive->m_uiFirstIndex = uiIndexStart;
 			pPrimitive->m_uiFirstVertex = uiVertexStart;
@@ -303,7 +302,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 	return true;
 }
 
-bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::string sAttribName, const float** kppfBuffer, UINT* puiStride, UINT16* puiCount, uint32_t uiType)
+bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::string sAttribName, const float** kppfBuffer, UINT* puiStride, UINT* puiCount, uint32_t uiType)
 {
 	if (kPrimitive.attributes.find(sAttribName) != kPrimitive.attributes.end())
 	{
@@ -323,7 +322,7 @@ bool MeshManager::GetAttributeData(const tinygltf::Model& kModel, const tinygltf
 
 		if (puiCount != nullptr)
 		{
-			*puiCount = (UINT16)kAccessor.count;
+			*puiCount = (UINT)kAccessor.count;
 		}
 	}
 	else
@@ -346,11 +345,11 @@ std::unordered_map<std::string, Mesh*>* MeshManager::GetMeshes()
 	return &m_Meshes;
 }
 
-bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, std::vector<UploadBuffer<DirectX::XMFLOAT3X4>*>& uploadBuffers)
+bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, ID3D12Device5* pDevice)
 {
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{
-		if (it->second->CreateBLAS(pGraphicsCommandList, uploadBuffers) == false)
+		if (it->second->CreateBLAS(pGraphicsCommandList, pDevice) == false)
 		{
 			return false;
 		}
@@ -415,7 +414,7 @@ bool MeshManager::RemoveMesh(std::string sName)
 	return true;
 }
 
-bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT16* puiVertexCount, Primitive* pPrimitive)
+bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, const float** kppfPositionBuffer, UINT* puiPositionStride, const float** kppfNormalBuffer, UINT* puiNormalStride, const float** kppfTexCoordBuffer, UINT* puiTexCoordStride, const float** kppfTangentBuffer, UINT* puiTangentStride, UINT* puiVertexCount, Primitive* pPrimitive)
 {
 	if (GetAttributeData(kModel, kPrimitive, "POSITION", kppfPositionBuffer, puiPositionStride, puiVertexCount, TINYGLTF_TYPE_VEC3) == false)
 	{
@@ -429,8 +428,7 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 
 	if (GetAttributeData(kModel, kPrimitive, "NORMAL", kppfNormalBuffer, puiNormalStride, nullptr, TINYGLTF_TYPE_VEC3) == true)
 	{
-		//has normal map so enable bit
-		pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::NORMAL;
+
 	}
 
 	if (GetAttributeData(kModel, kPrimitive, "TANGENT", kppfTangentBuffer, puiTangentStride, nullptr, TINYGLTF_TYPE_VEC4) == true)
@@ -442,7 +440,7 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 	return true;
 }
 
-bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT16* puiIndexCount, const UINT16& kuiVertexStart)
+bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT* puiIndexCount)
 {
 	const tinygltf::Accessor* kpAccessor;
 
@@ -458,7 +456,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 	const tinygltf::BufferView& kBufferView = kModel.bufferViews[kpAccessor->bufferView];
 	const tinygltf::Buffer& kBuffer = kModel.buffers[kBufferView.buffer];
 
-	*puiIndexCount = (UINT16)kpAccessor->count;
+	*puiIndexCount = (UINT)kpAccessor->count;
 
 	const void* pData = &kBuffer.data[kpAccessor->byteOffset + kBufferView.byteOffset];
 
