@@ -53,7 +53,7 @@ UploadBuffer<Vertex>* Mesh::GetVertexUploadBuffer()
 	return m_pVertexBuffer;
 }
 
-UploadBuffer<UINT16>* Mesh::GetIndexUploadBuffer()
+UploadBuffer<UINT>* Mesh::GetIndexUploadBuffer()
 {
 	return m_pIndexBuffer;
 }

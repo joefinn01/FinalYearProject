@@ -57,14 +57,14 @@ struct Primitive
 		return (UINT8)m_Attributes & (UINT8)primAttribute;
 	}
 
-	bool CreateBLAS(ID3D12GraphicsCommandList4*& pGraphicsCommandList, UploadBuffer<Vertex>*& pVertexBuffer, UploadBuffer<UINT16>*& pIndexBuffer, ID3D12Device5*& pDevice)
+	bool CreateBLAS(ID3D12GraphicsCommandList4*& pGraphicsCommandList, UploadBuffer<Vertex>*& pVertexBuffer, UploadBuffer<UINT>*& pIndexBuffer, ID3D12Device5*& pDevice)
 	{
 		D3D12_RAYTRACING_GEOMETRY_DESC geomDesc = {};
 		geomDesc.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
 		geomDesc.Triangles.IndexBuffer = pIndexBuffer->GetBufferGPUAddress(m_uiFirstIndex);
 		geomDesc.Triangles.IndexCount = m_uiNumIndices;
 		geomDesc.Triangles.Transform3x4 = 0;
-		geomDesc.Triangles.IndexFormat = DXGI_FORMAT_R16_UINT;
+		geomDesc.Triangles.IndexFormat = DXGI_FORMAT_R32_UINT;
 		geomDesc.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
 		geomDesc.Triangles.VertexCount = m_uiNumVertices;
 		geomDesc.Triangles.VertexBuffer.StartAddress = pVertexBuffer->GetBufferGPUAddress(m_uiFirstVertex);
@@ -164,7 +164,7 @@ public:
 	std::vector<Texture*>* GetTextures();
 
 	UploadBuffer<Vertex>* GetVertexUploadBuffer();
-	UploadBuffer<UINT16>* GetIndexUploadBuffer();
+	UploadBuffer<UINT>* GetIndexUploadBuffer();
 
 	std::vector<MeshNode*>* GetNodes();
 	const MeshNode* GetNode(int iIndex) const;
@@ -178,7 +178,7 @@ private:
 	std::vector<Texture*> m_Textures;
 
 	UploadBuffer<Vertex>* m_pVertexBuffer;
-	UploadBuffer<UINT16>* m_pIndexBuffer;
+	UploadBuffer<UINT>* m_pIndexBuffer;
 
 	std::vector<MeshNode*> m_Nodes;
 

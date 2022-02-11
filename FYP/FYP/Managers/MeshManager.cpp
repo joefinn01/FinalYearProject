@@ -22,14 +22,12 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 
 	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
 	{
-
-
-
 		for (int i = 0; i < it->second->GetNodes()->size(); ++i)
 		{
 			pNode = it->second->GetNode(i);
 
 			//create descriptors per primitive
+
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
 			{
 				if (pHeap->Allocate(uiIndex) == false)
@@ -37,7 +35,7 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 					return;
 				}
 
-				pNode->m_Primitives[i]->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, (sizeof(UINT16) * pNode->m_Primitives[i]->m_uiNumIndices) / 2, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(UINT16), pNode->m_Primitives[i]->m_uiFirstIndex);
+				pNode->m_Primitives[i]->m_pIndexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pIndexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, pNode->m_Primitives[i]->m_uiNumIndices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(UINT), pNode->m_Primitives[i]->m_uiFirstIndex);
 
 				if (pHeap->Allocate(uiIndex) == false)
 				{
@@ -100,7 +98,7 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 	}
 
 	std::vector<Vertex> vertexBuffer = std::vector<Vertex>();
-	std::vector<UINT16> indexBuffer = std::vector<UINT16>();
+	std::vector<UINT> indexBuffer = std::vector<UINT>();
 
 	for (UINT i = 0; i < pScene->nodes.size(); ++i)
 	{
@@ -113,7 +111,7 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 	pMesh->m_pVertexBuffer = new UploadBuffer<Vertex>(App::GetApp()->GetDevice(), vertexBuffer.size(), false);
 	pMesh->m_pVertexBuffer->CopyData(0, vertexBuffer);
 
-	pMesh->m_pIndexBuffer = new UploadBuffer<UINT16>(App::GetApp()->GetDevice(), indexBuffer.size(), false);
+	pMesh->m_pIndexBuffer = new UploadBuffer<UINT>(App::GetApp()->GetDevice(), indexBuffer.size(), false);
 	pMesh->m_pIndexBuffer->CopyData(0, indexBuffer);
 
 	pMesh->m_uiNumVertices = vertexBuffer.size();
@@ -131,7 +129,7 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 	return true;
 }
 
-bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT16>* pIndexBuffer)
+bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT>* pIndexBuffer)
 {
 	MeshNode* pNode = new MeshNode();
 	pNode->m_uiIndex = uiNodeIndex;
@@ -269,7 +267,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 
 				for (int i = 0; i < uiIndexCount; ++i)
 				{
-					pIndexBuffer->push_back((UINT16)(i + uiVertexStart));
+					pIndexBuffer->push_back((UINT)(i + uiVertexStart));
 				}
 			}
 
@@ -440,7 +438,7 @@ bool MeshManager::GetVertexData(const tinygltf::Model& kModel, const tinygltf::P
 	return true;
 }
 
-bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT16>* pIndexBuffer, UINT* puiIndexCount)
+bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Primitive& kPrimitive, std::vector<UINT>* pIndexBuffer, UINT* puiIndexCount)
 {
 	const tinygltf::Accessor* kpAccessor;
 
@@ -468,7 +466,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back((UINT16)(pUINTData[i]));
+			pIndexBuffer->push_back((UINT)(pUINTData[i]));
 		}
 	}
 	break;
@@ -479,7 +477,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back(pUINTData[i]);
+			pIndexBuffer->push_back((UINT)pUINTData[i]);
 		}
 	}
 	break;
@@ -490,7 +488,7 @@ bool MeshManager::GetIndexData(const tinygltf::Model& kModel, const tinygltf::Pr
 
 		for (UINT i = 0; i < *puiIndexCount; ++i)
 		{
-			pIndexBuffer->push_back((UINT16)pUINTData[i]);
+			pIndexBuffer->push_back((UINT)pUINTData[i]);
 		}
 	}
 	break;
