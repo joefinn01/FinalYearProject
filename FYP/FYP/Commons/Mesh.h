@@ -17,7 +17,8 @@ enum class PrimitiveAttributes : UINT8
 {
 	NORMAL = 1,
 	OCCLUSION = 2,
-	EMISSIVE = 4
+	METALLIC_ROUGHNESS = 4,
+	EMISSIVE = 8
 };
 
 inline PrimitiveAttributes operator|(PrimitiveAttributes a, PrimitiveAttributes b)

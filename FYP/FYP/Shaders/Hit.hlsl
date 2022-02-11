@@ -82,6 +82,8 @@ void ClosestHitNormalOcclusion(inout RayPayload payload, in BuiltInTriangleInter
 void ClosestHitNormal(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 #elif OCCLUSION_MAPPING
 void ClosestHitOcclusion(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+#elif NO_METALLIC_ROUGHNESS
+void ClosestHitNoMetallicRoughness(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 #else
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 #endif
@@ -119,6 +121,8 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     //Get primitive information from textures
     float3 albedo = pow(Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
     
+#if !NO_METALLIC_ROUGHNESS
+    
 #if NORMAL_MAPPING
     float3 tangents[3] =
     {
@@ -133,6 +137,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 #else
     float3 perPixelNormal = normal;
 #endif
+    
     float fMetallic = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).b;
     float fRoughness = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamAnisotropicWrap, uv, 0).g;
     
@@ -172,9 +177,12 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         float fNormDotLight = max(dot(perPixelNormal, light), 0.0f);
         outgoingRadiance += ((fKD * albedo / PI) + specular) * radiance * fNormDotLight;
     }
-
+#endif
+    
 #if OCCLUSION_MAPPING
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * fOcclusion * albedo) + outgoingRadiance, 1.0f);
+#elif NO_METALLIC_ROUGHNESS
+    payload.color = float4(albedo, 1.0f);
 #else
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * albedo) + outgoingRadiance, 1.0f);
 #endif

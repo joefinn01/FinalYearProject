@@ -881,6 +881,7 @@ bool App::CreateStateObject()
 	AssociateShader(m_kwsClosestHitNameOcclusion, m_kwsClosestHitNameOcclusion, pipelineDesc);
 	AssociateShader(m_kwsClosestHitNameNormalOcclusion, m_kwsClosestHitNameNormalOcclusion, pipelineDesc);
 	AssociateShader(m_kwsClosestHitNameNormalOcclusionEmission, m_kwsClosestHitNameNormalOcclusionEmission, pipelineDesc);
+	AssociateShader(m_kwsClosestHitNameNoMetallicRoughness, m_kwsClosestHitNameNoMetallicRoughness, pipelineDesc);
 
 	//Add a hit groups
 	CreateHitGroup(m_kwsClosestHitName, m_kwsHitGroupName, pipelineDesc);
@@ -888,6 +889,7 @@ bool App::CreateStateObject()
 	CreateHitGroup(m_kwsClosestHitNameOcclusion, m_kwsHitGroupNameOcclusion, pipelineDesc);
 	CreateHitGroup(m_kwsClosestHitNameNormalOcclusion, m_kwsHitGroupNameNormalOcclusion, pipelineDesc);
 	CreateHitGroup(m_kwsClosestHitNameNormalOcclusionEmission, m_kwsHitGroupNameNormalOcclusionEmission, pipelineDesc);
+	CreateHitGroup(m_kwsClosestHitNameNoMetallicRoughness, m_kwsHitGroupNameNoMetallicRoughness, pipelineDesc);
 
 	//Do shader config stuff
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT* pShaderConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
@@ -906,6 +908,7 @@ bool App::CreateStateObject()
 	pAssociation->AddExport(m_kwsHitGroupNameOcclusion);
 	pAssociation->AddExport(m_kwsHitGroupNameNormalOcclusion);
 	pAssociation->AddExport(m_kwsHitGroupNameNormalOcclusionEmission);
+	pAssociation->AddExport(m_kwsHitGroupNameNoMetallicRoughness);
 
 	//Global
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
@@ -990,6 +993,11 @@ bool App::CompileShaders()
 		L"OCCLUSION_MAPPING", L"1",
 	};
 
+	DxcDefine noMetallicRoughness[] =
+	{
+		L"NO_METALLIC_ROUGHNESS", L"1",
+	};
+
 	DxcDefine normalOcclusion[] =
 	{
 		L"NORMAL_MAPPING", L"1",
@@ -1052,6 +1060,16 @@ bool App::CompileShaders()
 	}
 
 	m_Shaders[m_kwsClosestHitNameNormalOcclusionEmission] = pBlob.Get();
+
+	//no metallic roughness
+	pBlob = DXRHelper::CompileShader(L"Shaders/Hit.hlsl", m_kwsClosestHitEntrypoint, noMetallicRoughness, _countof(noMetallicRoughness));
+
+	if (pBlob == nullptr)
+	{
+		return false;
+	}
+
+	m_Shaders[m_kwsClosestHitNameNoMetallicRoughness] = pBlob.Get();
 
 	return true;
 }
@@ -1297,25 +1315,29 @@ bool App::CreateHitGroupShaderTable()
 			{
 				hitGroupRootArgs.IndexCB.Index = pNode->m_Primitives[i]->m_iIndex;
 
-				if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::EMISSIVE))
+				if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::EMISSIVE))
 				{
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormalOcclusionEmission);
 				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION))
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
 				{
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormalOcclusion);
 				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL))
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
 				{
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNormal);
 				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION))
+				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
 				{
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameOcclusion);
 				}
-				else
+				else if(pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
 				{
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupName);
+				}
+				else
+				{
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsHitGroupNameNoMetallicRoughness);
 				}
 
 				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
@@ -1918,9 +1940,21 @@ void App::PopulatePrimitivePerInstanceCB()
 			for (int j = 0; j < pNodes->at(i)->m_Primitives.size(); ++j)
 			{
 				primitiveInstanceCB.AlbedoIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iAlbedoIndex)->GetDescriptor()->GetDescriptorIndex();
-				primitiveInstanceCB.NormalIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iNormalIndex)->GetDescriptor()->GetDescriptorIndex();
-				primitiveInstanceCB.MetallicRoughnessIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iMetallicRoughnessIndex)->GetDescriptor()->GetDescriptorIndex();
-				primitiveInstanceCB.OcclusionIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iOcclusionIndex)->GetDescriptor()->GetDescriptorIndex();
+
+				if (pNodes->at(i)->m_Primitives[j]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS) == true)
+				{
+					primitiveInstanceCB.MetallicRoughnessIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iMetallicRoughnessIndex)->GetDescriptor()->GetDescriptorIndex();
+				}
+
+				if (pNodes->at(i)->m_Primitives[j]->HasAttribute(PrimitiveAttributes::NORMAL) == true)
+				{
+					primitiveInstanceCB.NormalIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iNormalIndex)->GetDescriptor()->GetDescriptorIndex();
+				}
+
+				if (pNodes->at(i)->m_Primitives[j]->HasAttribute(PrimitiveAttributes::OCCLUSION) == true)
+				{
+					primitiveInstanceCB.OcclusionIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iOcclusionIndex)->GetDescriptor()->GetDescriptorIndex();
+				}
 
 				primitiveInstanceCB.IndicesIndex = pNodes->at(i)->m_Primitives[j]->m_pIndexDesc->GetDescriptorIndex();
 				primitiveInstanceCB.VerticesIndex = pNodes->at(i)->m_Primitives[j]->m_pVertexDesc->GetDescriptorIndex();

@@ -286,6 +286,11 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 				pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::OCCLUSION;
 			}
 
+			if (pPrimitive->m_iMetallicRoughnessIndex != -1)
+			{
+				pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::METALLIC_ROUGHNESS;
+			}
+
 			pNode->m_Primitives.push_back(pPrimitive);
 		}
 	}

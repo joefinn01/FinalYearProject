@@ -229,12 +229,14 @@ protected:
 	LPCWSTR m_kwsClosestHitEntrypoint = L"ClosestHit";
 
 	LPCWSTR m_kwsClosestHitName = L"ClosestHit";
+	LPCWSTR m_kwsClosestHitNameNoMetallicRoughness = L"ClosestHitNoMetallicRoughness";
 	LPCWSTR m_kwsClosestHitNameNormal = L"ClosestHitNormal";
 	LPCWSTR m_kwsClosestHitNameOcclusion = L"ClosestHitOcclusion";
 	LPCWSTR m_kwsClosestHitNameNormalOcclusion = L"ClosestHitNormalOcclusion";
 	LPCWSTR m_kwsClosestHitNameNormalOcclusionEmission = L"ClosestHitNormalOcclusionEmission";
 
 	LPCWSTR m_kwsHitGroupName = L"HitGroup";
+	LPCWSTR m_kwsHitGroupNameNoMetallicRoughness = L"HitGroupNoMetallicRoughness";
 	LPCWSTR m_kwsHitGroupNameNormal = L"HitGroupNormal";
 	LPCWSTR m_kwsHitGroupNameOcclusion = L"HitGroupOcclusion";
 	LPCWSTR m_kwsHitGroupNameNormalOcclusion = L"HitGroupNormalOcclusion";
