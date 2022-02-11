@@ -1,10 +1,6 @@
 #include "Commons.hlsli"
 
-Texture2D<float4> g_LocalAlbedo : register(t5);
-Texture2D<float4> g_LocalNormal : register(t6);
-Texture2D<float4> g_LocalMetallicRoughness : register(t7);
-Texture2D<float4> g_LocalOcclusion : register(t8);
-ConstantBuffer<PrimitiveInstanceCB> l_PrimitiveInstanceCB : register(b1);
+ConstantBuffer<PrimitiveIndexCB> l_PrimitiveIndexCB : register(b1);
 
 float NormalDistribution(float3 normal, float3 halfVec, float fRoughness)
 {
@@ -43,13 +39,13 @@ float3 FresnelSchlick(float fNormDotHalf, float3 reflectance0)
 float3 GetNormal(float2 uv, float3 normal, float3 tangent)
 {
     float3 tangentW = normalize(tangent - dot(tangent, normal) * normal);
-    tangentW = mul(float4(tangentW, 1.0f), g_PrimitivePerFrameCB[l_PrimitiveInstanceCB.InstanceIndex].InvWorld).xyz;
-    float3 normalW = mul(float4(normal, 0.0f), g_PrimitivePerFrameCB[l_PrimitiveInstanceCB.InstanceIndex].InvWorld).xyz;
+    tangentW = mul(float4(tangentW, 1.0f), g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index].InvWorld).xyz;
+    float3 normalW = mul(float4(normal, 0.0f), g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index].InvWorld).xyz;
     
     float3x3 tbn = float3x3(tangentW, cross(normalW, tangentW), normalW);
     
     //Remap so between -1 and 1
-    float3 normalT = g_LocalNormal.SampleLevel(SamPointWrap, uv, 0).xyz;
+    float3 normalT = Tex2DTable[g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index].NormalIndex].SampleLevel(SamPointWrap, uv, 0).xyz;
     normalT *= 2.0f;
     normalT -= 1.0f;
 
@@ -90,40 +86,45 @@ void ClosestHitOcclusion(inout RayPayload payload, in BuiltInTriangleIntersectio
 void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 #endif
 {
+    //Get copy of this primitives geometry information
+    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index];
+    
     float3 hitPosW = HitWoldPosition();
     float3 viewW = normalize(g_ScenePerFrameCB.EyePosW.xyz - hitPosW);
     
-    //Calculate geometry indices index
-    uint indexByteSize = 2;
-    uint indicesPerTri = 3;
-    uint triIndexStride = indicesPerTri * indexByteSize;
-    uint baseIndex = PrimitiveIndex() * triIndexStride;
+    //Cache indices
+    uint primitiveIndex = PrimitiveIndex();
     
-    const uint3 indexes = Load3x16BitIndices(baseIndex);
+    uint3 indices;
+    indices.x = BufferUintTable[geomInfo.IndicesIndex][primitiveIndex * 3];
+    indices.y = BufferUintTable[geomInfo.IndicesIndex][primitiveIndex * 3 + 1];
+    indices.z = BufferUintTable[geomInfo.IndicesIndex][primitiveIndex * 3 + 2];
 
+    StructuredBuffer<Vertex> vertices = Vertices[geomInfo.VerticesIndex];
+    
     //Get relevant mesh information at point on tri
     float3 normals[3] =
     {
-        Vertices[indexes[0]].Normal,
-        Vertices[indexes[1]].Normal,
-        Vertices[indexes[2]].Normal
+        vertices[indices[0]].Normal,
+        vertices[indices[1]].Normal,
+        vertices[indices[2]].Normal
     };
     
     float3 normal = InterpolateAttribute(normals, attr);
     
     //Calculate hit pos UV coords
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    float2 uv = bary.x * Vertices[indexes[0]].TexCoords + bary.y * Vertices[indexes[1]].TexCoords + bary.z * Vertices[indexes[2]].TexCoords;
-
+    float2 uv = bary.x * vertices[indices[0]].TexCoords + bary.y * vertices[indices[1]].TexCoords + bary.z * vertices[indices[2]].TexCoords;
+    
     //Get primitive information from textures
-    float3 albedo = pow(g_LocalAlbedo.SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
+    float3 albedo = pow(Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
     
 #if NORMAL_MAPPING
     float3 tangents[3] =
     {
-        Vertices[indexes[0]].Tangent.xyz,
-        Vertices[indexes[1]].Tangent.xyz,
-        Vertices[indexes[2]].Tangent.xyz
+        vertices[indices[0]].Tangent.xyz,
+        vertices[indices[1]].Tangent.xyz,
+        vertices[indices[2]].Tangent.xyz
     };
     
     float3 tangent = InterpolateAttribute(tangents, attr);
@@ -132,11 +133,11 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 #else
     float3 perPixelNormal = normal;
 #endif
-    float fMetallic = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).b;
-    float fRoughness = g_LocalMetallicRoughness.SampleLevel(SamAnisotropicWrap, uv, 0).g;
+    float fMetallic = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).b;
+    float fRoughness = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamAnisotropicWrap, uv, 0).g;
     
 #if OCCLUSION_MAPPING
-    float fOcclusion = g_LocalMetallicRoughness.SampleLevel(SamPointWrap, uv, 0).r;
+    float fOcclusion = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).r;
 #endif
     
     float3 outgoingRadiance = float3(0.0f, 0.0f, 0.0f);
@@ -146,7 +147,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     for (int i = 0; i < g_ScenePerFrameCB.NumLights; ++i)
     {
-        float3 light = g_LightCB[i].Position - hitPosW;
+        float3 light = g_LightCB[g_ScenePerFrameCB.LightIndex][i].Position - hitPosW;
         
         //Cache distance so not done again when normalizing
         float fDistance = length(light);
@@ -155,9 +156,9 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         
         float3 halfVec = normalize(viewW + light);
 
-        float fAttenuation = min(1.0f / dot(g_LightCB[i].Attenuation[0], float3(1.0f, g_LightCB[i].Attenuation[1] * fDistance, g_LightCB[i].Attenuation[2] * fDistance * fDistance)), 1.0f);
+        float fAttenuation = min(1.0f / dot(g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[0], float3(1.0f, g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[1] * fDistance, g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[2] * fDistance * fDistance)), 1.0f);
 
-        float3 radiance = g_LightCB[i].Color.xyz * fAttenuation;
+        float3 radiance = g_LightCB[g_ScenePerFrameCB.LightIndex][i].Color.xyz * fAttenuation;
 
         float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
         float fNDF = NormalDistribution(perPixelNormal, halfVec, fRoughness);
@@ -174,7 +175,6 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 
 #if OCCLUSION_MAPPING
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * fOcclusion * albedo) + outgoingRadiance, 1.0f);
-    //payload.color = float4((float3(0.03f, 0.03f, 0.03f) * albedo) + outgoingRadiance, 1.0f);
 #else
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * albedo) + outgoingRadiance, 1.0f);
 #endif

@@ -273,6 +273,9 @@
     <None Include="Shaders\Commons.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\DescriptorTables.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Hit.hlsl">

@@ -26,6 +26,11 @@ struct ScenePerFrameCB
 
 	XMFLOAT3 EyePosW;
 	int NumLights;
+
+	int LightIndex;
+	int PrimitivePerFrameIndex;
+	int PrimitivePerInstanceIndex;
+	float pad;
 };
 
 struct PrimitivePerFrameCB
@@ -34,10 +39,22 @@ struct PrimitivePerFrameCB
 	XMMATRIX InvWorld;
 };
 
+struct PrimitiveIndexCB
+{
+	UINT32 Index;
+	XMFLOAT3 pad;
+};
+
 struct PrimitiveInstanceCB
 {
-	int InstanceIndex;
-	int pad;
+	UINT32 IndicesIndex;
+	UINT32 VerticesIndex;
+	UINT32 AlbedoIndex;
+	UINT32 NormalIndex;
+
+	UINT32 MetallicRoughnessIndex;
+	UINT32 OcclusionIndex;
+	XMFLOAT2 pad;
 };
 
 #endif // CONSTANT_BUFFERS_H

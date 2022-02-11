@@ -39,9 +39,8 @@ namespace GlobalRootSignatureParams
 	{
 		OUTPUT = 0,
 		ACCELERATION_STRUCTURE,
+		STANDARD_DESCRIPTORS,
 		PER_FRAME_SCENE_CB,
-		PER_FRAME_PRIMITIVE_CB,
-		LIGHT_CB,
 		COUNT
 	};
 }
@@ -49,12 +48,7 @@ namespace GlobalRootSignatureParams
 namespace LocalRootSignatureParams {
 	enum Value 
 	{
-		ALBEDO_TEX,
-		NORMAL_TEX,
-		METALLIC_ROUGHNESS_TEX,
-		OCCLUSION_TEX,
-		PRIMITIVE_CB,
-		VERTEX_INDEX,
+		INDEX = 0,
 		COUNT
 	};
 }
@@ -125,6 +119,7 @@ protected:
 	bool CreateGlobalSignature();
 
 	void PopulateDescriptorHeaps();
+	void PopulatePrimitivePerInstanceCB();
 
 	bool CheckRaytracingSupport();
 
@@ -195,6 +190,9 @@ protected:
 
 	UINT64 m_uiFenceValue = 0;
 
+	static const UINT32 s_kuiNumUserDescriptorRanges = 16;
+	static const UINT32 s_kuiNumStandardDescriptorRanges = 2 + s_kuiNumUserDescriptorRanges;
+
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12StateObject> m_pStateObject;
@@ -202,7 +200,7 @@ protected:
 
 	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDxcBlob>> m_Shaders;
 
-	DescriptorHeap* m_pSrvUavHeap = nullptr;
+	DescriptorHeap* m_pSRVHeap = nullptr;
 	DescriptorHeap* m_pRTVHeap = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
@@ -214,6 +212,7 @@ protected:
 	UINT m_uiRayGenRecordSize;
 
 	UploadBuffer<ScenePerFrameCB>* m_pScenePerFrameCBUpload = nullptr;
+	UploadBuffer<PrimitiveInstanceCB>* m_pPrimitiveInstanceCBUpload = nullptr;
 
 	std::vector<PrimitivePerFrameCB> m_PrimitivePerFrameCBs;
 	std::vector<LightCB> m_LightCBs;

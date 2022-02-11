@@ -299,6 +299,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleasePix|x64'">true</ExcludedFromBuild>
     </None>
+    <None Include="Shaders\DescriptorTables.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Hit.hlsl">
