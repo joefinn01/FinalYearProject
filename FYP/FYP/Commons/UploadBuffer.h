@@ -2,6 +2,8 @@
 
 #include "Helpers/DebugHelper.h"
 #include "Helpers/MathHelper.h"
+#include "Commons/DescriptorHeap.h"
+#include "Commons/SRVDescriptor.h"
 
 #include <Include/DirectX/d3dx12.h>
 
@@ -13,6 +15,7 @@ public:
 	{
 		m_bIsConstant = bIsConstant;
 		m_uiByteSize = sizeof(T);
+		m_uiNumElements = uiCount;
 
 		//Ensuring always a multiple of 255 by adding 255 and masking bits
 		if (bIsConstant)
@@ -48,6 +51,7 @@ public:
 	{
 		m_bIsConstant = bIsConstant;
 		m_uiByteSize = uiByteSize;
+		m_uiNumElements = uiCount;
 
 		//Ensuring always a multiple of 255 by adding 255 and masking bits
 		if (bIsConstant)
@@ -112,16 +116,42 @@ public:
 		return m_pUploadBuffer.Get()->GetGPUVirtualAddress() + (uiCount * m_uiByteSize);
 	}
 
+	UINT GetStride()
+	{
+		return m_uiByteSize;
+	}
+
+	bool CreateSRV(DescriptorHeap* pHeap, UINT64 uiFirstElement = 0)
+	{
+		UINT uiIndex;
+		if (pHeap->Allocate(uiIndex) == false)
+		{
+			return false;
+		}
+
+		m_pDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), m_pUploadBuffer.Get(), D3D12_SRV_DIMENSION_BUFFER, m_uiNumElements, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, m_uiByteSize, 0);
+
+		return true;
+	}
+
+	Descriptor* GetDesc()
+	{
+		return m_pDesc;
+	}
+
 protected:
 
 private:
 	bool m_bIsConstant;
 
 	UINT m_uiByteSize = 0;
+	UINT m_uiNumElements = 0;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pUploadBuffer;
 
 	BYTE* m_pMappedData = nullptr;
 
 	Tag tag = L"UploadBuffer";
+
+	Descriptor* m_pDesc = nullptr;
 };
