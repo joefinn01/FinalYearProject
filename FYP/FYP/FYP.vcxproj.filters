@@ -46,6 +46,12 @@
     <Filter Include="Include\tinygltf">
       <UniqueIdentifier>{5aba03ff-887f-4d41-ab57-fefd80710c48}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Raytracing">
+      <UniqueIdentifier>{846fe108-9041-41d9-b7c4-76ef1bca7057}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Raster">
+      <UniqueIdentifier>{bf7726c7-8f3f-4d21-8cef-03f134c9eeb9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -276,16 +282,37 @@
     <None Include="Shaders\DescriptorTables.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Shaders\RaytracingCommons.hlsli">
+      <Filter>Shaders\Raytracing</Filter>
+    </None>
+    <None Include="Shaders\RasterCommons.hlsli">
+      <Filter>Shaders\Raster</Filter>
+    </None>
+    <None Include="Shaders\LightingHelper.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\Hit.hlsl">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\Miss.hlsl">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\RayGen.hlsl">
-      <Filter>Shaders</Filter>
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\GBufferVertex.hlsl">
+      <Filter>Shaders\Raster</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\GBufferPixel.hlsl">
+      <Filter>Shaders\Raster</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\LightPixel.hlsl">
+      <Filter>Shaders\Raster</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\LightVertex.hlsl">
+      <Filter>Shaders\Raster</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>

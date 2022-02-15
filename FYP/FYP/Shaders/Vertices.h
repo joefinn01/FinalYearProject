@@ -17,4 +17,10 @@ struct Vertex
 	XMFLOAT2 TexCoords;
 };
 
+struct ScreenQuadVertex
+{
+	XMFLOAT3 Position;
+	XMFLOAT2 TexCoords;
+};
+
 #endif // VERTICES_H

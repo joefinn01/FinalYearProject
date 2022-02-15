@@ -10,15 +10,21 @@ class DescriptorHeap;
 class Texture
 {
 public:
-	bool CreateDescriptor(DescriptorHeap* pHeap);
+	Texture(ID3D12Resource* pTextureRes, DXGI_FORMAT textureFormat);
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> GetTexture() const;
-	Microsoft::WRL::ComPtr<ID3D12Resource>* GetTexturePtr();
+	bool CreateSRVDesc(DescriptorHeap* pHeap);
+	void RecreateSRVDesc(DescriptorHeap* pHeap);
+	bool CreateUAVDesc(DescriptorHeap* pHeap);
+	void RecreateUAVDesc(DescriptorHeap* pHeap);
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> GetResource() const;
+	Microsoft::WRL::ComPtr<ID3D12Resource>* GetResourcePtr();
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> GetUpload() const;
 	Microsoft::WRL::ComPtr<ID3D12Resource>* GetUploadPtr();
 
-	Descriptor* GetDescriptor() const;
+	Descriptor* GetSRVDesc() const;
+	Descriptor* GetUAVDesc() const;
 
 	DXGI_FORMAT GetFormat() const;
 
@@ -27,7 +33,8 @@ public:
 protected:
 
 private:
-	Descriptor* m_pDescriptor = nullptr;
+	Descriptor* m_pSRVDesc = nullptr;
+	Descriptor* m_pUAVDesc = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pTexture = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pUploadHeap = nullptr;

@@ -8,7 +8,7 @@ Tag tag = L"TextureManager";
 
 bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImage, Texture*& pTexture, ID3D12GraphicsCommandList* pGraphicsCommandList)
 {
-	Texture* pTempTexture = new Texture();
+	Texture* pTempTexture = new Texture(nullptr, DXGI_FORMAT_UNKNOWN);
 
 	switch (kImage.component)
 	{
@@ -108,7 +108,7 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 		&texDesc,
 		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
-		IID_PPV_ARGS(pTempTexture->GetTexturePtr()->GetAddressOf())
+		IID_PPV_ARGS(pTempTexture->GetResourcePtr()->GetAddressOf())
 	);
 
 	if (FAILED(hr))
@@ -124,7 +124,7 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 	(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
 		D3D12_HEAP_FLAG_NONE,
-		&CD3DX12_RESOURCE_DESC::Buffer(GetRequiredIntermediateSize(pTempTexture->GetTexture().Get(), 0, 1)),
+		&CD3DX12_RESOURCE_DESC::Buffer(GetRequiredIntermediateSize(pTempTexture->GetResource().Get(), 0, 1)),
 		D3D12_RESOURCE_STATE_GENERIC_READ,
 		nullptr,
 		IID_PPV_ARGS(pTempTexture->GetUploadPtr()->GetAddressOf())
@@ -145,11 +145,11 @@ bool TextureManager::LoadTexture(std::string sName, const tinygltf::Image& kImag
 	data.RowPitch = (LONG_PTR)kImage.width * (kImage.bits * kImage.component * 0.125f);
 	data.SlicePitch = (LONG_PTR)kImage.height;
 
-	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
+	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetResource().Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST));
 
-	UpdateSubresources(pGraphicsCommandList, pTempTexture->GetTexture().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
+	UpdateSubresources(pGraphicsCommandList, pTempTexture->GetResource().Get(), pTempTexture->GetUpload().Get(), 0, 0, 1, &data);
 
-	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetTexture().Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(pTempTexture->GetResource().Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
 	if (pTexture != nullptr)
 	{

@@ -7,14 +7,15 @@
 
 Tag tag = L"DXRHelper";
 
-IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint, DxcDefine* pDefines, UINT32 uiDefineCount)
+IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsTargetLevel, LPCWSTR wsEntrypoint, LPCWSTR* pDefines, UINT32 uiDefineCount)
 {
 	//Create compiler, library and include handler
-	IDxcCompiler* pCompiler = nullptr;
-	IDxcLibrary* pLibrary = nullptr;
-	IDxcIncludeHandler* pDxcIncludeHandler;
+	Microsoft::WRL::ComPtr<IDxcCompiler3> pCompiler = nullptr;
+	Microsoft::WRL::ComPtr<IDxcLibrary> pLibrary = nullptr;
+	Microsoft::WRL::ComPtr<IDxcUtils> pUtils = nullptr;
+	Microsoft::WRL::ComPtr<IDxcIncludeHandler> pIncludeHandler = nullptr;
 
-	HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, __uuidof(IDxcCompiler), (void**)&pCompiler);
+	HRESULT hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(pCompiler.GetAddressOf()));
 
 	if (FAILED(hr))
 	{
@@ -23,7 +24,16 @@ IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint, Dxc
 		return nullptr;
 	}
 
-	hr = DxcCreateInstance(CLSID_DxcLibrary, __uuidof(IDxcLibrary), (void**)&pLibrary);
+	hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(pUtils.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create dxc utils!");
+
+		return nullptr;
+	}
+
+	hr = DxcCreateInstance(CLSID_DxcLibrary, IID_PPV_ARGS(pLibrary.GetAddressOf()));
 
 	if (FAILED(hr))
 	{
@@ -32,7 +42,7 @@ IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint, Dxc
 		return nullptr;
 	}
 
-	hr = pLibrary->CreateIncludeHandler(&pDxcIncludeHandler);
+	hr = pUtils->CreateDefaultIncludeHandler(pIncludeHandler.GetAddressOf());
 
 	if (FAILED(hr))
 	{
@@ -41,55 +51,69 @@ IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint, Dxc
 		return nullptr;
 	}
 
-	//Open shader file
-	std::ifstream file = std::ifstream(wsFilename);
-
-	if (file.good() == false)
-	{
-		LOG_ERROR(tag, L"Failed to open file with path %ls!", wsFilename);
-
-		return nullptr;
-	}
-
-	//Read shader file
-	std::stringstream stringStream;
-	stringStream << file.rdbuf();
-
-	std::string sShader = stringStream.str();
-
-	//Create blob
-	IDxcBlobEncoding* pBlobEncoding = nullptr;
-
-	hr = pLibrary->CreateBlobWithEncodingFromPinned((LPBYTE)sShader.c_str(), (uint32_t)sShader.size(), 0, &pBlobEncoding);
+	Microsoft::WRL::ComPtr<IDxcBlobEncoding> pSource = nullptr;
+	hr = pUtils->LoadFile(wsFilename, nullptr, pSource.GetAddressOf());
 
 	if (FAILED(hr))
 	{
-		LOG_ERROR(tag, L"Failed to create encoded blob from file %ls!", wsFilename);
+		LOG_ERROR(tag, L"Failed to load shader file!");
 
 		return nullptr;
 	}
 
-	//Compile shader
-	IDxcOperationResult* pResult = nullptr;
+	DxcBuffer buffer;
+	buffer.Ptr = pSource->GetBufferPointer();
+	buffer.Size = pSource->GetBufferSize();
+	buffer.Encoding = DXC_CP_ACP;
 
-	LPCWSTR* arguments = nullptr;
-	UINT32 uiArgCount = 0;
+	std::vector<LPCWSTR> args;
 
-	//If debug then set flags to make debugging possible
+	args.push_back(wsFilename);
+
+	//Only add entry point if one has been provided
+	if (wsEntrypoint != L"")
+	{
+		args.push_back(L"-E");
+		args.push_back(wsEntrypoint);
+	}
+
+	args.push_back(L"-T");	//Target
+	args.push_back(wsTargetLevel);
+
 #if _DEBUG
-	uiArgCount = 2;
-
-	arguments = new LPCWSTR[uiArgCount];
-
-	arguments[0] = L"-Zi";	//Attach debug information
-	arguments[1] = L"-Od";	//Disable shader optimization
+	args.push_back(L"-Zi");	//Attach debug information
+	args.push_back(L"-Od");	//Disable shader optimization
 #endif
 
-	hr = pCompiler->Compile(pBlobEncoding, wsFilename, wsEntrypoint, L"lib_6_3", arguments, uiArgCount, pDefines, uiDefineCount, pDxcIncludeHandler, &pResult);
+	for (int i = 0; i < uiDefineCount; ++i)
+	{
+		args.push_back(L"-D");
+		args.push_back(pDefines[i]);
+	}
+
+	Microsoft::WRL::ComPtr<IDxcResult> pResult = nullptr;
+	hr = pCompiler->Compile(&buffer, args.data(), args.size(), pIncludeHandler.Get(), IID_PPV_ARGS(pResult.GetAddressOf()));
 
 	if (FAILED(hr))
 	{
-		LOG_ERROR(tag, L"Failed to compile shader from file %ls!", wsFilename);
+		LOG_ERROR(tag, L"Failed to compile the shader!");
+
+		return nullptr;
+	}
+
+	Microsoft::WRL::ComPtr<IDxcBlobUtf8> pError = nullptr;
+	hr = pResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(pError.GetAddressOf()), nullptr);
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to get the error output of the compiled shader!");
+
+		return nullptr;
+	}
+
+	if (pError != nullptr && pError->GetStringLength() != 0)
+	{
+		OutputDebugStringA(pError->GetStringPointer());
 
 		return nullptr;
 	}
@@ -127,7 +151,7 @@ IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint, Dxc
 
 	IDxcBlob* pBlob;
 
-	hr = pResult->GetResult(&pBlob);
+	hr = pResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pBlob), nullptr);
 
 	if (FAILED(hr))
 	{

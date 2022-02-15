@@ -1,8 +1,15 @@
 #include "Texture.h"
 #include "Commons/DescriptorHeap.h"
 #include "Commons/SRVDescriptor.h"
+#include "Commons/UAVDescriptor.h"
 
-bool Texture::CreateDescriptor(DescriptorHeap* pHeap)
+Texture::Texture(ID3D12Resource* pTextureRes, DXGI_FORMAT textureFormat)
+{
+	m_pTexture = pTextureRes;
+	m_Format = textureFormat;
+}
+
+bool Texture::CreateSRVDesc(DescriptorHeap* pHeap)
 {
 	UINT uiIndex;
 
@@ -11,17 +18,45 @@ bool Texture::CreateDescriptor(DescriptorHeap* pHeap)
 		return false;
 	}
 
-	m_pDescriptor = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), m_pTexture.Get(), m_Format, 1);
+	m_pSRVDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), m_pTexture.Get(), m_Format, 1);
 
 	return true;
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource> Texture::GetTexture() const
+void Texture::RecreateSRVDesc(DescriptorHeap* pHeap)
+{
+	SRVDescriptor* pDesc = new SRVDescriptor(m_pSRVDesc->GetDescriptorIndex(), pHeap->GetCpuDescriptorHandle(m_pSRVDesc->GetDescriptorIndex()), m_pTexture.Get(), m_Format, 1);
+	delete m_pSRVDesc;
+	m_pSRVDesc = pDesc;
+}
+
+bool Texture::CreateUAVDesc(DescriptorHeap* pHeap)
+{
+	UINT uiIndex;
+
+	if (pHeap->Allocate(uiIndex) == false)
+	{
+		return false;
+	}
+
+	m_pUAVDesc = new UAVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), m_pTexture.Get(), D3D12_UAV_DIMENSION_TEXTURE2D, m_Format);
+
+	return true;
+}
+
+void Texture::RecreateUAVDesc(DescriptorHeap* pHeap)
+{
+	UAVDescriptor* pDesc = new UAVDescriptor(m_pUAVDesc->GetDescriptorIndex(), pHeap->GetCpuDescriptorHandle(m_pUAVDesc->GetDescriptorIndex()), m_pTexture.Get(), D3D12_UAV_DIMENSION_TEXTURE2D, m_Format);
+	delete m_pUAVDesc;
+	m_pUAVDesc = pDesc;
+}
+
+Microsoft::WRL::ComPtr<ID3D12Resource> Texture::GetResource() const
 {
 	return m_pTexture;
 }
 
-Microsoft::WRL::ComPtr<ID3D12Resource>* Texture::GetTexturePtr()
+Microsoft::WRL::ComPtr<ID3D12Resource>* Texture::GetResourcePtr()
 {
 	return &m_pTexture;
 }
@@ -36,9 +71,14 @@ Microsoft::WRL::ComPtr<ID3D12Resource>* Texture::GetUploadPtr()
 	return &m_pUploadHeap;
 }
 
-Descriptor* Texture::GetDescriptor() const
+Descriptor* Texture::GetSRVDesc() const
 {
-	return m_pDescriptor;
+	return m_pSRVDesc;
+}
+
+Descriptor* Texture::GetUAVDesc() const
+{
+	return m_pUAVDesc;
 }
 
 DXGI_FORMAT Texture::GetFormat() const

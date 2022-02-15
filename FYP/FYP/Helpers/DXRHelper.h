@@ -9,7 +9,7 @@ struct DxcDefine;
 class DXRHelper
 {
 public:
-	static IDxcBlob* CompileShader(LPCWSTR wsFilename, LPCWSTR wsEntrypoint = L"", DxcDefine* pDefines = nullptr, UINT32 uiDefineCount = 0);
+	static IDxcBlob* CompileShader(LPCWSTR wsFilename, LPCWSTR wsTargetLevel, LPCWSTR wsEntrypoint = L"", LPCWSTR* pDefines = nullptr, UINT32 uiDefineCount = 0);
 
 	static Microsoft::WRL::ComPtr<ID3D12Resource> CreateDefaultBuffer(ID3D12Device* pDevice, ID3D12GraphicsCommandList* pGraphicsCommandList, const void* pData, UINT64 uiByteSize, Microsoft::WRL::ComPtr<ID3D12Resource>& pUploadBuffer);
 

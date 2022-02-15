@@ -4,7 +4,7 @@
 class UAVDescriptor : public Descriptor
 {
 public:
-	UAVDescriptor(UINT uiDescriptorIndex, D3D12_CPU_DESCRIPTOR_HANDLE handle, ID3D12Resource* pResource, D3D12_UAV_DIMENSION viewDimension);
+	UAVDescriptor(UINT uiDescriptorIndex, D3D12_CPU_DESCRIPTOR_HANDLE handle, ID3D12Resource* pResource, D3D12_UAV_DIMENSION viewDimension, DXGI_FORMAT format);
 
 protected:
 

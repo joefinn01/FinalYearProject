@@ -48,7 +48,7 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 
 		for (int i = 0; i < it->second->m_Textures.size(); ++i)
 		{
-			it->second->m_Textures[i]->CreateDescriptor(pHeap);
+			it->second->m_Textures[i]->CreateSRVDesc(pHeap);
 		}
 	}
 }

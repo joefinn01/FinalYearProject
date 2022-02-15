@@ -1,58 +1,7 @@
-#include "Commons.hlsli"
+#include "RaytracingCommons.hlsli"
+#include "LightingHelper.hlsli"
 
 ConstantBuffer<PrimitiveIndexCB> l_PrimitiveIndexCB : register(b1);
-
-float NormalDistribution(float3 normal, float3 halfVec, float fRoughness)
-{
-    float fRoughSq = fRoughness * fRoughness * fRoughness * fRoughness;
-    
-    float fNormDotHalf = max(dot(normal, halfVec), 0.0f);
-
-    float fDenominator = (fNormDotHalf * fNormDotHalf * (fRoughSq - 1.0f) + 1.0f);
-    fDenominator = PI * fDenominator * fDenominator;
-    
-    return fRoughSq / fDenominator;
-}
-
-float SchlickGGX(float fNormDotView, float fRoughness)
-{
-    float fR = fRoughness + 1;
-    float fK = (fR * fR) / 8.0f;
-
-    return fNormDotView / (fNormDotView * (1.0f - fK) + fK);
-}
-
-float GeometryDistribution(float3 normal, float3 view, float3 light, float fRoughness)
-{
-    float fNormDotView = max(dot(normal, view), 0.0f);
-    float fNormDotLight = max(dot(normal, light), 0.0f);
-
-    return SchlickGGX(fNormDotView, fRoughness) * SchlickGGX(fNormDotLight, fRoughness);
-
-}
-
-float3 FresnelSchlick(float fNormDotHalf, float3 reflectance0)
-{
-    return reflectance0 + (1.0f - reflectance0) * pow(clamp(1.0f - fNormDotHalf, 0.0f, 1.0f), 5.0f);
-}
-
-float3 GetNormal(float2 uv, float3 normal, float3 tangent)
-{
-    float3 tangentW = normalize(tangent - dot(tangent, normal) * normal);
-    tangentW = mul(float4(tangentW, 1.0f), g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index].InvWorld).xyz;
-    float3 normalW = mul(float4(normal, 0.0f), g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index].InvWorld).xyz;
-    
-    float3x3 tbn = float3x3(tangentW, cross(normalW, tangentW), normalW);
-    
-    //Remap so between -1 and 1
-    float3 normalT = Tex2DTable[g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index].NormalIndex].SampleLevel(SamPointWrap, uv, 0).xyz;
-    normalT *= 2.0f;
-    normalT -= 1.0f;
-
-    //Transform to model space
-    return normalize(mul(normalT, tbn));
-
-}
 
 Ray GenerateCameraRay(uint2 index, float3 eyePosW, float4x4 InvViewProjection)
 {
@@ -90,6 +39,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 {
     //Get copy of this primitives geometry information
     PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index];
+    PrimitivePerFrameCB primInfo = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index];
     
     float3 hitPosW = HitWoldPosition();
     float3 viewW = normalize(g_ScenePerFrameCB.EyePosW.xyz - hitPosW);
@@ -112,7 +62,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         vertices[indices[2]].Normal
     };
     
-    float3 normal = InterpolateAttribute(normals, attr);
+    float3 normalL = InterpolateAttribute(normals, attr);
     
     //Calculate hit pos UV coords
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
@@ -120,8 +70,10 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     //Get primitive information from textures
     float3 albedo = pow(Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
-    
+
 #if !NO_METALLIC_ROUGHNESS
+    
+    float3 normalW = mul(float4(normalL, 0.0f), primInfo.InvTransposeWorld).xyz;
     
 #if NORMAL_MAPPING
     float3 tangents[3] =
@@ -133,9 +85,10 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     
     float3 tangent = InterpolateAttribute(tangents, attr);
     
-    float3 perPixelNormal = GetNormal(uv, normal, tangent);
-#else
-    float3 perPixelNormal = normal;
+    tangent = normalize(tangent - dot(tangent, normalL) * normalL);
+    tangent = mul(float4(tangent, 1.0f), primInfo.InvTransposeWorld).xyz;
+    
+    normalW = GetNormal(uv, normalW, tangent, Tex2DTable[g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index].NormalIndex], SamLinearClamp);
 #endif
     
     float fMetallic = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).b;
@@ -166,15 +119,15 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         float3 radiance = g_LightCB[g_ScenePerFrameCB.LightIndex][i].Color.xyz * fAttenuation;
 
         float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
-        float fNDF = NormalDistribution(perPixelNormal, halfVec, fRoughness);
-        float fGeomDist = GeometryDistribution(perPixelNormal, viewW, light, fRoughness);
+        float fNDF = NormalDistribution(normalW, halfVec, fRoughness);
+        float fGeomDist = GeometryDistribution(normalW, viewW, light, fRoughness);
 
         //Add 0.0001f to prevent divide by zero
-        float3 specular = (fNDF * fGeomDist * fresnel) / (4.0f * max(dot(perPixelNormal, viewW), 0.0f) * max(dot(perPixelNormal, light), 0.0f) + 0.0001f);
+        float3 specular = (fNDF * fGeomDist * fresnel) / (4.0f * max(dot(normalW, viewW), 0.0f) * max(dot(normalW, light), 0.0f) + 0.0001f);
         
         float3 fKD = (float3(1.0f, 1.0f, 1.0f) - fresnel) * (1.0f - fMetallic);
         
-        float fNormDotLight = max(dot(perPixelNormal, light), 0.0f);
+        float fNormDotLight = max(dot(normalW, light), 0.0f);
         outgoingRadiance += ((fKD * albedo / PI) + specular) * radiance * fNormDotLight;
     }
 #endif

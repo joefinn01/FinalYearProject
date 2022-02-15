@@ -20,9 +20,20 @@
 class Timer;
 class DescriptorHeap;
 class Descriptor;
+class Texture;
 
 struct RayGenerationCB;
 struct Vertex;
+
+
+enum class GBuffer
+{
+	NORMAL = 0,
+	TANGENT,
+	TEXCOORDS,
+	PRIMITIVE_ID,
+	COUNT
+};
 
 struct FrameResources
 {
@@ -31,27 +42,70 @@ struct FrameResources
 
 	UploadBuffer<PrimitivePerFrameCB>* m_pPrimitivePerFrameCBUpload = nullptr;
 	UploadBuffer<LightCB>* m_pLightCBUpload = nullptr;
+	UploadBuffer<PrimitiveIndexCB>* m_pPrimitiveIndexCBUpload = nullptr;
+	UploadBuffer<DeferredPerFrameCB>* m_pDeferredPerFrameCBUpload = nullptr;
+
+	Texture* m_GBuffer[(int)GBuffer::COUNT];
 };
 
-namespace GlobalRootSignatureParams
+namespace RaytracingPass
 {
-	enum Value
+	namespace GlobalRootSignatureParams
 	{
-		OUTPUT = 0,
-		ACCELERATION_STRUCTURE,
-		STANDARD_DESCRIPTORS,
-		PER_FRAME_SCENE_CB,
-		COUNT
-	};
+		enum Value
+		{
+			OUTPUT = 0,
+			ACCELERATION_STRUCTURE,
+			STANDARD_DESCRIPTORS,
+			PER_FRAME_SCENE_CB,
+			COUNT
+		};
+	}
+
+	namespace LocalRootSignatureParams {
+		enum Value
+		{
+			INDEX = 0,
+			COUNT
+		};
+	}
 }
 
-namespace LocalRootSignatureParams {
-	enum Value 
+namespace DeferredPass
+{
+	namespace GBufferPass
 	{
-		INDEX = 0,
-		COUNT
-	};
+		enum Value
+		{
+			STANDARD_DESCRIPTORS = 0,
+			PER_FRAME_SCENE_CB,
+			PRIMITIVE_INDEX_CB,
+			COUNT
+		};
+	}
+
+	namespace LightPass
+	{
+		enum Value
+		{
+			STANDARD_DESCRIPTORS = 0,
+			PER_FRAME_SCENE_CB,
+			PER_FRAME_DEFERRED_CB,
+			COUNT
+		};
+	}
 }
+
+enum class ShaderVersions
+{
+	NOTHING = 0,
+	NO_METALLIC_ROUGHNESS,
+	NORMAL,
+	OCCLUSION,
+	NORMAL_OCCLUSION,
+	NORMAL_OCCLUSION_EMISSION,
+	COUNT
+};
 
 class App
 {
@@ -94,6 +148,12 @@ protected:
 	
 	bool CreateStateObject();
 
+	bool CreatePSOs();
+	bool CreateGBufferPSO();
+	bool CreateLightPSO();
+
+	void CreateInputDescs();
+
 	void AssociateShader(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc);
 
 	void CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc, D3D12_HIT_GROUP_TYPE hitGroupType = D3D12_HIT_GROUP_TYPE_TRIANGLES);
@@ -110,16 +170,23 @@ protected:
 	bool CreateMissShaderTable();
 	bool CreateHitGroupShaderTable();
 
-	bool CreateOutputBuffer();
+	bool CreateOutputBuffers();
 
 	void CreateCBs();
 
 	bool CreateSignatures();
+
 	bool CreateLocalSignature();
 	bool CreateGlobalSignature();
 
+	bool CreateGBufferSignature();
+	bool CreateLightSignature();
+
+	bool CreateRootSignature(D3D12_ROOT_PARAMETER1* rootParams, int iNumRootParams, const CD3DX12_STATIC_SAMPLER_DESC* staticSamplers, int iNumStaticSamplers, ID3D12RootSignature** ppRootSignature, D3D12_ROOT_SIGNATURE_FLAGS flags = D3D12_ROOT_SIGNATURE_FLAG_NONE);
+
 	void PopulateDescriptorHeaps();
 	void PopulatePrimitivePerInstanceCB();
+	void PopulateDeferredPerFrameCB();
 
 	bool CheckRaytracingSupport();
 
@@ -157,6 +224,12 @@ protected:
 	UploadBuffer<LightCB>* GetLightUploadBuffer();
 	UploadBuffer<LightCB>* GetLightUploadBuffer(int iIndex);
 
+	UploadBuffer<PrimitiveIndexCB>* GetPrimitiveIndexUploadBuffer();
+	UploadBuffer<PrimitiveIndexCB>* GetPrimitiveIndexUploadBuffer(int iIndex);
+
+	Texture** GetGBuffer();
+	Texture** GetGBuffer(int iIndex);
+
 	static App* m_pApp;
 
 	Timer m_Timer;
@@ -176,7 +249,10 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRaytracingOutput;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGBufferRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLightRootSignature;
+
+	Texture* m_pRaytracingOutput;
 
 	Microsoft::WRL::ComPtr<IDXGIFactory4> m_pDXGIFactory = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Fence> m_pFence = nullptr;
@@ -184,14 +260,12 @@ protected:
 	Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain = nullptr;
 	static const UINT s_kuiSwapChainBufferCount = 2;
 
-	Descriptor* m_pOutputDesc;
-
 	UINT m_uiFrameIndex = 0;
 
 	UINT64 m_uiFenceValue = 0;
 
 	static const UINT32 s_kuiNumUserDescriptorRanges = 16;
-	static const UINT32 s_kuiNumStandardDescriptorRanges = 2 + s_kuiNumUserDescriptorRanges;
+	static const UINT32 s_kuiNumStandardDescriptorRanges = 6 + s_kuiNumUserDescriptorRanges;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 
@@ -221,31 +295,72 @@ protected:
 
 	UINT m_uiNumLights = 0;
 
-	//shader stuff
+	//Raytracing shader names
 	LPCWSTR m_kwsRayGenName = L"RayGen";
 
 	LPCWSTR m_kwsMissName = L"Miss";
 
 	LPCWSTR m_kwsClosestHitEntrypoint = L"ClosestHit";
 
-	LPCWSTR m_kwsClosestHitName = L"ClosestHit";
-	LPCWSTR m_kwsClosestHitNameNoMetallicRoughness = L"ClosestHitNoMetallicRoughness";
-	LPCWSTR m_kwsClosestHitNameNormal = L"ClosestHitNormal";
-	LPCWSTR m_kwsClosestHitNameOcclusion = L"ClosestHitOcclusion";
-	LPCWSTR m_kwsClosestHitNameNormalOcclusion = L"ClosestHitNormalOcclusion";
-	LPCWSTR m_kwsClosestHitNameNormalOcclusionEmission = L"ClosestHitNormalOcclusionEmission";
+	LPCWSTR m_ClosestHitNames[(int)ShaderVersions::COUNT] =
+	{
+		L"ClosestHit",
+		L"ClosestHitNoMetallicRoughness",
+		L"ClosestHitNormal",
+		L"ClosestHitOcclusion",
+		L"ClosestHitNormalOcclusion",
+		L"ClosestHitNormalOcclusionEmission",
+	};
 
-	LPCWSTR m_kwsHitGroupName = L"HitGroup";
-	LPCWSTR m_kwsHitGroupNameNoMetallicRoughness = L"HitGroupNoMetallicRoughness";
-	LPCWSTR m_kwsHitGroupNameNormal = L"HitGroupNormal";
-	LPCWSTR m_kwsHitGroupNameOcclusion = L"HitGroupOcclusion";
-	LPCWSTR m_kwsHitGroupNameNormalOcclusion = L"HitGroupNormalOcclusion";
-	LPCWSTR m_kwsHitGroupNameNormalOcclusionEmission = L"HitGroupNormalOcclusionEmission";
+	LPCWSTR m_HitGroupNames[(int)ShaderVersions::COUNT] =
+	{
+		L"HitGroup",
+		L"HitGroupNoMetallicRoughness",
+		L"HitGroupNormal",
+		L"HitGroupOcclusion",
+		L"HitGroupNormalOcclusion",
+		L"HitGroupNormalOcclusionEmission",
+	};
+
+	//Light pass shader names
+	LPCWSTR m_kwsLightVertexName = L"LightVertex";
+
+	LPCWSTR m_LightPixelNames[(int)ShaderVersions::COUNT] =
+	{
+		L"LightPixel",
+		L"LightPixelNoMetallicRoughness",
+		L"LightPixelNormal",
+		L"LightPixelOcclusion",
+		L"LightPixelNormalOcclusion",
+		L"LightPixelNormalOcclusionEmission",
+	};
+
+	//G Buffer pass shader names
+	LPCWSTR m_kwsGBufferVertexName = L"GBufferVertex";
+	LPCWSTR m_kwsGBufferPixelName = L"GBufferPixel";
+
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSO = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSOs[(int)ShaderVersions::COUNT] = { };
+
+	std::vector<D3D12_INPUT_ELEMENT_DESC> m_ScreenQuadInputDesc;
+	std::vector<D3D12_INPUT_ELEMENT_DESC> m_DefaultInputDesc;
 
 	bool m_b4xMSAAState = false;
 	UINT m_uiMSAAQuality = 0;
 
 	DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+	DXGI_FORMAT m_GBufferFormats[(int)GBuffer::COUNT] =
+	{
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+		DXGI_FORMAT_R8G8_UNORM,
+		DXGI_FORMAT_R8_UINT
+	};
+
+	D3D12_DESCRIPTOR_RANGE1 m_BindlessDescRanges[s_kuiNumStandardDescriptorRanges] = {};
 
 #if _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> m_pDebug = nullptr;

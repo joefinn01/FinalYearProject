@@ -22,21 +22,25 @@ struct LightCB
 
 struct ScenePerFrameCB
 {
-	XMMATRIX InvWorldProjection;
+	XMMATRIX ViewProjection;
+	XMMATRIX InvViewProjection;
 
 	XMFLOAT3 EyePosW;
-	int NumLights;
+	UINT32 NumLights;
 
-	int LightIndex;
-	int PrimitivePerFrameIndex;
-	int PrimitivePerInstanceIndex;
-	float pad;
+	UINT32 LightIndex;
+	UINT32 PrimitivePerFrameIndex;
+	UINT32 PrimitivePerInstanceIndex;
+	UINT32 ScreenWidth;
+
+	UINT32 ScreenHeight;
+	XMFLOAT3 pad;
 };
 
 struct PrimitivePerFrameCB
 {
 	XMMATRIX World;
-	XMMATRIX InvWorld;
+	XMMATRIX InvTransposeWorld;
 };
 
 struct PrimitiveIndexCB
@@ -55,6 +59,17 @@ struct PrimitiveInstanceCB
 	UINT32 MetallicRoughnessIndex;
 	UINT32 OcclusionIndex;
 	XMFLOAT2 pad;
+};
+
+struct DeferredPerFrameCB
+{
+	UINT32 PrimitiveIndexIndex;
+	UINT32 NormalIndex;
+	UINT32 TangentIndex;
+	UINT32 TexCoordIndex;
+
+	UINT32 DepthIndex;
+	XMFLOAT3 pad;
 };
 
 #endif // CONSTANT_BUFFERS_H
