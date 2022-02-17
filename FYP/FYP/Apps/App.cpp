@@ -20,6 +20,10 @@
 #include "Managers/TextureManager.h"
 #include "Commons/Texture.h"
 #include "GameObjects/GameObject.h"
+#include "Include/ImGui/imgui_impl_dx12.h"
+#include "Include/ImGui/imgui_impl_win32.h"
+#include "Include/ImGui/imgui.h"
+
 
 #if PIX
 #include "pix3.h"
@@ -181,6 +185,8 @@ bool App::Init()
 	{
 		return false;
 	}
+
+	InitImGui();
 
 	CreateCBs();
 
@@ -468,6 +474,8 @@ void App::Draw()
 	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
 	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
+		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
 	if (m_bRaytrace == true)
 	{
 		DrawRaytracedPass();
@@ -701,9 +709,11 @@ void App::DrawLightPass()
 
 	m_pGraphicsCommandList->DrawInstanced(4, 1, 0, 0);
 
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
-
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	DrawImGui();
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 }
 
 int App::Run()
@@ -742,8 +752,16 @@ void App::Load()
 {
 }
 
+// Forward declare message handler from imgui_impl_win32.cpp
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wParam, lParam) == true)
+	{
+		return true;
+	}
+
 	switch (msg)
 	{
 		// WM_ACTIVATE is sent when the window is activated or deactivated.  
@@ -1952,6 +1970,51 @@ void App::InitConstantBuffers()
 	}
 }
 
+void App::InitImGui()
+{
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+
+	ImGui::StyleColorsDark();
+
+	// Setup Platform/Renderer backends
+	ImGui_ImplWin32_Init(WindowManager::GetInstance()->GetHWND());
+	ImGui_ImplDX12_Init(m_pDevice.Get(), s_kuiSwapChainBufferCount, m_BackBufferFormat, m_pImGuiSRVHeap->GetHeap().Get(), m_pImGuiSRVHeap->GetCpuDescriptorHandle(), m_pImGuiSRVHeap->GetGpuDescriptorHandle());
+}
+
+void App::UpdateImGui(const Timer& kTimer)
+{
+	ImGuiIO& io = ImGui::GetIO();
+
+	io.DeltaTime = kTimer.DeltaTime();
+}
+
+void App::DrawImGui()
+{
+	std::vector<ID3D12DescriptorHeap*> heaps = { m_pImGuiSRVHeap->GetHeap().Get() };
+	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+
+	ImGui::NewFrame();
+
+	ImGui::Begin("Options");
+	ImGui::Checkbox("Raytrace", &m_bRaytrace);
+	ImGui::End();
+
+	ImGui::Render();
+
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_pGraphicsCommandList.Get());
+}
+
+void App::ShutdownImGui()
+{
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+}
+
 void App::UpdatePerFrameCB(UINT uiFrameIndex)
 {
 	Camera* pCamera = ObjectManager::GetInstance()->GetActiveCamera();
@@ -2595,6 +2658,12 @@ bool App::CreateDescriptorHeaps()
 		return false;
 	}
 
+	m_pImGuiSRVHeap = new DescriptorHeap();
+
+	if (m_pImGuiSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, 10) == false)
+	{
+		return false;
+	}
 
 	m_pRTVHeap = new DescriptorHeap();
 
@@ -2602,7 +2671,6 @@ bool App::CreateDescriptorHeaps()
 	{
 		return false;
 	}
-
 
 	m_pDSVHeap = new DescriptorHeap();
 

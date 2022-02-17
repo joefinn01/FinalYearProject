@@ -177,6 +177,13 @@
     <ClCompile Include="Helpers\DebugHelper.cpp" />
     <ClCompile Include="Helpers\DXRHelper.cpp" />
     <ClCompile Include="Helpers\MathHelper.cpp" />
+    <ClCompile Include="Include\ImGui\imgui.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_demo.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_draw.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_impl_dx12.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_impl_win32.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_tables.cpp" />
+    <ClCompile Include="Include\ImGui\imgui_widgets.cpp" />
     <ClCompile Include="Include\nv_helpers_dx12\BottomLevelASGenerator.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DebugPix|x64'">true</ExcludedFromBuild>
@@ -238,6 +245,14 @@
     <ClInclude Include="Helpers\MathHelper.h" />
     <ClInclude Include="Include\DirectX\d3dx12.h" />
     <ClInclude Include="Include\dxguids\dxguids.h" />
+    <ClInclude Include="Include\ImGui\imconfig.h" />
+    <ClInclude Include="Include\ImGui\imgui.h" />
+    <ClInclude Include="Include\ImGui\imgui_impl_dx12.h" />
+    <ClInclude Include="Include\ImGui\imgui_impl_win32.h" />
+    <ClInclude Include="Include\ImGui\imgui_internal.h" />
+    <ClInclude Include="Include\ImGui\imstb_rectpack.h" />
+    <ClInclude Include="Include\ImGui\imstb_textedit.h" />
+    <ClInclude Include="Include\ImGui\imstb_truetype.h" />
     <ClInclude Include="Include\nv_helpers_dx12\BottomLevelASGenerator.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='DebugPix|x64'">true</ExcludedFromBuild>

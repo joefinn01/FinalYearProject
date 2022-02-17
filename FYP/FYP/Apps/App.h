@@ -218,6 +218,11 @@ protected:
 	void InitScene();
 	void InitConstantBuffers();
 
+	void InitImGui();
+	void UpdateImGui(const Timer& kTimer);
+	void DrawImGui();
+	void ShutdownImGui();
+
 	void UpdatePerFrameCB(UINT uiFrameIndex);
 
 	void LogAdapters();
@@ -312,6 +317,7 @@ protected:
 	std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<IDxcBlob>> m_Shaders;
 
 	DescriptorHeap* m_pSRVHeap = nullptr;
+	DescriptorHeap* m_pImGuiSRVHeap = nullptr;
 	DescriptorHeap* m_pRTVHeap = nullptr;
 	DescriptorHeap* m_pDSVHeap = nullptr;
 
