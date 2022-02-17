@@ -19,6 +19,14 @@ struct Vertex
 
 struct ScreenQuadVertex
 {
+#ifndef HLSL
+	ScreenQuadVertex(DirectX::XMFLOAT3 pos, DirectX::XMFLOAT2 texCoords)
+	{
+		Position = pos;
+		TexCoords = texCoords;
+	}
+#endif
+
 	XMFLOAT3 Position;
 	XMFLOAT2 TexCoords;
 };

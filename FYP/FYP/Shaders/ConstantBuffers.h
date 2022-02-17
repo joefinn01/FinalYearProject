@@ -63,13 +63,10 @@ struct PrimitiveInstanceCB
 
 struct DeferredPerFrameCB
 {
-	UINT32 PrimitiveIndexIndex;
 	UINT32 NormalIndex;
-	UINT32 TangentIndex;
-	UINT32 TexCoordIndex;
-
+	UINT32 AlbedoIndex;
+	UINT32 MetallicRoughnessOcclusion;
 	UINT32 DepthIndex;
-	XMFLOAT3 pad;
 };
 
 #endif // CONSTANT_BUFFERS_H

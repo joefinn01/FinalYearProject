@@ -23,9 +23,30 @@ bool Texture::CreateSRVDesc(DescriptorHeap* pHeap)
 	return true;
 }
 
+bool Texture::CreateSRVDesc(DescriptorHeap* pHeap, DXGI_FORMAT format)
+{
+	UINT uiIndex;
+
+	if (pHeap->Allocate(uiIndex) == false)
+	{
+		return false;
+	}
+
+	m_pSRVDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), m_pTexture.Get(), format, 1);
+
+	return true;
+}
+
 void Texture::RecreateSRVDesc(DescriptorHeap* pHeap)
 {
 	SRVDescriptor* pDesc = new SRVDescriptor(m_pSRVDesc->GetDescriptorIndex(), pHeap->GetCpuDescriptorHandle(m_pSRVDesc->GetDescriptorIndex()), m_pTexture.Get(), m_Format, 1);
+	delete m_pSRVDesc;
+	m_pSRVDesc = pDesc;
+}
+
+void Texture::RecreateSRVDesc(DescriptorHeap* pHeap, DXGI_FORMAT format)
+{
+	SRVDescriptor* pDesc = new SRVDescriptor(m_pSRVDesc->GetDescriptorIndex(), pHeap->GetCpuDescriptorHandle(m_pSRVDesc->GetDescriptorIndex()), m_pTexture.Get(), format, 1);
 	delete m_pSRVDesc;
 	m_pSRVDesc = pDesc;
 }

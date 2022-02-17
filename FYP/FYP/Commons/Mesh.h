@@ -21,15 +21,7 @@ enum class PrimitiveAttributes : UINT8
 	EMISSIVE = 8
 };
 
-inline PrimitiveAttributes operator|(PrimitiveAttributes a, PrimitiveAttributes b)
-{
-	return static_cast<PrimitiveAttributes>(static_cast<UINT8>(a) | static_cast<UINT8>(b));
-}
-
-inline PrimitiveAttributes operator&(PrimitiveAttributes a, PrimitiveAttributes b)
-{
-	return static_cast<PrimitiveAttributes>(static_cast<UINT8>(a) & static_cast<UINT8>(b));
-}
+DEFINE_ENUM_FLAG_OPERATORS(PrimitiveAttributes);
 
 struct Primitive
 {

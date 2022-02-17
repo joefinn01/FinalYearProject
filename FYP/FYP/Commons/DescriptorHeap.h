@@ -21,6 +21,7 @@ public:
 
 	UINT GetDescriptorSize() const;
 	UINT GetNumDescsAllocated() const;
+	UINT GetMaxNumDescs() const;
 
 protected:
 

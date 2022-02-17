@@ -4,6 +4,8 @@
 #include "Commons/DescriptorHeap.h"
 #include "Commons/UAVDescriptor.h"
 #include "Commons/SRVDescriptor.h"
+#include "Commons/RTVDescriptor.h"
+#include "Commons/DSVDescriptor.h"
 #include "Commons/Texture.h"
 #include "Commons/Mesh.h"
 #include "Shaders/ConstantBuffers.h"
@@ -171,6 +173,8 @@ bool App::Init()
 		{
 			GBuffer[j] = new Texture(nullptr, m_GBufferFormats[j]);
 		}
+
+		SetDepthStencilBuffer(i, new Texture(nullptr, m_DepthStencilFormat));
 	}
 
 	if (CreateOutputBuffers() == false)
@@ -179,6 +183,8 @@ bool App::Init()
 	}
 
 	CreateCBs();
+
+	CreateScreenQuad();
 
 	InitScene();
 
@@ -191,6 +197,10 @@ bool App::Init()
 
 	PopulatePrimitivePerInstanceCB();
 	PopulateDeferredPerFrameCB();
+
+	PopulateRenderInfoQueue();
+
+	PopulatePrimitiveIndexCB();
 
 	if (CreateShaderTables() == false)
 	{
@@ -316,11 +326,107 @@ void App::OnResize()
 		rtvHeapHandle.Offset(1, m_pRTVHeap->GetDescriptorSize());
 	}
 
-	//Recreate the raytracing output
+	//Recreate all output buffers and corresponding descriptors
 
 	CreateOutputBuffers();
 
+	Descriptor** GBufferRTVs;
+	Texture** GBuffer;
+
+	//G Buffer RTVs haven't been created yet so create them
+	if (m_pRTVHeap->GetNumDescsAllocated() != m_pRTVHeap->GetMaxNumDescs())
+	{
+		UINT uiDescIndex = 0;
+
+		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+		{
+			GBuffer = GetGBuffer(i);
+			GBufferRTVs = GetGBufferRTVDescs(i);
+
+			for (int j = 0; j < (int)GBuffer::COUNT; ++j)
+			{
+				if (m_pRTVHeap->Allocate(uiDescIndex) == false)
+				{
+					LOG_ERROR(tag, L"Couldn't allocate G Buffer RTV as heap is full!");
+
+					return;
+				}
+
+				GBufferRTVs[j] = new RTVDescriptor(uiDescIndex, GBuffer[j]->GetResource().Get(), m_pRTVHeap->GetCpuDescriptorHandle(uiDescIndex));
+			}
+		}
+	}
+	else 	//Recreate G buffer RTV
+	{
+		Descriptor* pDesc = nullptr;
+
+		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+		{
+			GBuffer = GetGBuffer(i);
+			GBufferRTVs = GetGBufferRTVDescs(i);
+
+			for (int j = 0; j < (int)GBuffer::COUNT; ++j)
+			{
+				pDesc = new RTVDescriptor(GBufferRTVs[j]->GetDescriptorIndex(), GBuffer[j]->GetResource().Get(), m_pRTVHeap->GetCpuDescriptorHandle(GBufferRTVs[j]->GetDescriptorIndex()));
+				delete GBufferRTVs[j];
+				GBufferRTVs[j] = pDesc;
+			}
+		}
+	}
+
 	m_pRaytracingOutput->RecreateUAVDesc(m_pSRVHeap);
+
+	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	{
+		GBuffer = GetGBuffer(i);
+
+		for (int j = 0; j < (int)GBuffer::COUNT; ++j)
+		{
+			GBuffer[j]->RecreateSRVDesc(m_pSRVHeap);
+		}
+
+		GetDepthStencilBuffer(i)->RecreateSRVDesc(m_pSRVHeap, m_DepthStencilSRVFormat);
+	}
+
+	//Create depth stencil view
+	if (m_pDSVHeap->GetNumDescsAllocated() != m_pDSVHeap->GetMaxNumDescs())
+	{
+		UINT uiDescIndex = 0;
+
+		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+		{
+			if (m_pDSVHeap->Allocate(uiDescIndex) == false)
+			{
+				LOG_ERROR(tag, L"Couldn't allocate depth stencil buffer DSV as heap is full!");
+
+				return;
+			}
+
+			SetDepthStencilBufferView(i, new DSVDescriptor(uiDescIndex, GetDepthStencilBuffer(i)->GetResource().Get(), m_pDSVHeap->GetCpuDescriptorHandle(uiDescIndex), m_DepthStencilDSVFormat));
+		}
+	}
+	else 	//Recreate depth stencil DSV
+	{
+		Descriptor* pDesc = nullptr;
+
+		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+		{
+			pDesc = new DSVDescriptor(GetDepthStencilBufferView(i)->GetDescriptorIndex(), GetDepthStencilBuffer(i)->GetResource().Get(), m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView(i)->GetDescriptorIndex()), m_DepthStencilDSVFormat);
+			SetDepthStencilBufferView(i, pDesc);
+		}
+	}
+
+	ObjectManager::GetInstance()->GetActiveCamera()->Reshape(m_fCameraNearDepth, m_fCameraFarDepth);
+
+	//Update the viewport transform to cover the client area.
+	m_Viewport.TopLeftX = 0;
+	m_Viewport.TopLeftY = 0;
+	m_Viewport.Width = (float)WindowManager::GetInstance()->GetWindowWidth();
+	m_Viewport.Height = (float)WindowManager::GetInstance()->GetWindowHeight();
+	m_Viewport.MinDepth = 0.0f;
+	m_Viewport.MaxDepth = 1.0f;
+
+	m_ScissorRect = { 0, 0, static_cast<long>(WindowManager::GetInstance()->GetWindowWidth()), static_cast<long>(WindowManager::GetInstance()->GetWindowHeight()) };
 
 	// Execute the resize commands.
 	hr = m_pGraphicsCommandList->Close();
@@ -359,49 +465,17 @@ void App::Draw()
 		return;
 	}
 
-	if (CreateTLAS(true) == false)
-	{
-		return;
-	}
-
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
 	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
 	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
-	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
-	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
-	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
-	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
-	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
-	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
-	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
-	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
-	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
-	dispatchDesc.Width = WindowManager::GetInstance()->GetWindowWidth();
-	dispatchDesc.Height = WindowManager::GetInstance()->GetWindowHeight();
-	dispatchDesc.Depth = 1;
-	
-	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
-
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::OUTPUT, m_pSRVHeap->GetGpuDescriptorHandle(m_pRaytracingOutput->GetUAVDesc()->GetDescriptorIndex()));
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle(0));
-
-	m_pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
-
-	m_pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
-
-	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
-
-	m_pGraphicsCommandList->DispatchRays(&dispatchDesc);
-
-	//Copy to back buffer
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-
-	m_pGraphicsCommandList->CopyResource(GetBackBuffer(), m_pRaytracingOutput->GetResource().Get());
-
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+	if (m_bRaytrace == true)
+	{
+		DrawRaytracedPass();
+	}
+	else
+	{
+		DrawDeferredPass();
+	}
 
 	hr = m_pGraphicsCommandList->Close();
 
@@ -442,6 +516,194 @@ void App::Draw()
 	m_uiFrameIndex = (m_uiFrameIndex + 1) % s_kuiSwapChainBufferCount;
 
 	FlushCommandQueue();
+}
+
+void App::DrawRaytracedPass()
+{
+	if (CreateTLAS(true) == false)
+	{
+		return;
+	}
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+
+	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
+	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
+	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
+	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
+	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
+	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
+	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
+	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
+	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
+	dispatchDesc.Width = WindowManager::GetInstance()->GetWindowWidth();
+	dispatchDesc.Height = WindowManager::GetInstance()->GetWindowHeight();
+	dispatchDesc.Depth = 1;
+
+	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
+
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::OUTPUT, m_pSRVHeap->GetGpuDescriptorHandle(m_pRaytracingOutput->GetUAVDesc()->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle(0));
+
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
+
+	m_pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
+
+	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
+
+	m_pGraphicsCommandList->DispatchRays(&dispatchDesc);
+
+	//Copy to back buffer
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
+
+	m_pGraphicsCommandList->CopyResource(GetBackBuffer(), m_pRaytracingOutput->GetResource().Get());
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
+}
+
+void App::DrawDeferredPass()
+{
+	DrawGBufferPass();
+
+	DrawLightPass();
+}
+
+void App::DrawGBufferPass()
+{
+	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pGBufferRootSignature.Get());
+
+	m_pGraphicsCommandList->RSSetViewports(1, &m_Viewport);
+	m_pGraphicsCommandList->RSSetScissorRects(1, &m_ScissorRect);
+
+	Texture** GBuffer = GetGBuffer();
+
+	CD3DX12_RESOURCE_BARRIER* pResourceBarriers = new CD3DX12_RESOURCE_BARRIER[(int)GBuffer::COUNT + 1];
+
+	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	{
+		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	}
+
+	//Last index is depth stencil buffer transition
+	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
+
+	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	{
+		m_pGraphicsCommandList->ClearRenderTargetView(m_pRTVHeap->GetCpuDescriptorHandle(GetGBufferRTVDescs()[i]->GetDescriptorIndex()), m_GBufferClearColors[i], 0, nullptr);
+	}
+
+	m_pGraphicsCommandList->ClearDepthStencilView(m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE* pRenderTargetDescs = new D3D12_CPU_DESCRIPTOR_HANDLE[(int)GBuffer::COUNT];
+
+	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	{
+		pRenderTargetDescs[i] = m_pRTVHeap->GetCpuDescriptorHandle(GetGBufferRTVDescs()[i]->GetDescriptorIndex());
+	}
+
+	m_pGraphicsCommandList->OMSetRenderTargets((int)GBuffer::COUNT, pRenderTargetDescs, FALSE, &m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()));
+
+	m_pGraphicsCommandList->SetGraphicsRootDescriptorTable(DeferredPass::GBufferPass::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle(0));
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
+
+	RenderInfo* pRenderInfo = nullptr;
+
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
+	D3D12_INDEX_BUFFER_VIEW indexBufferView;
+
+	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
+	{
+		for (int i = 0; i < it->second.size(); ++i)
+		{
+			pRenderInfo = &it->second[i];
+
+			switch (pRenderInfo->m_pPrimitive->m_Attributes)
+			{
+			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS | PrimitiveAttributes::EMISSIVE:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION].Get());
+				break;
+
+			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL_OCCLUSION].Get());
+				break;
+
+			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::METALLIC_ROUGHNESS:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL].Get());
+				break;
+
+			case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::OCCLUSION].Get());
+				break;
+
+			case PrimitiveAttributes::METALLIC_ROUGHNESS:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NOTHING].Get());
+				break;
+
+			default:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NO_METALLIC_ROUGHNESS].Get());
+				break;
+			}
+
+			m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB, GetPrimitiveIndexUploadBuffer()->GetBufferGPUAddress((UINT)pRenderInfo->m_pPrimitive->m_iIndex));
+
+			vertexBufferView.BufferLocation = pRenderInfo->m_pVertexBuffer->GetBufferGPUAddress();
+			vertexBufferView.StrideInBytes = sizeof(Vertex);
+			vertexBufferView.SizeInBytes = pRenderInfo->m_pVertexBuffer->GetByteSize();
+
+			indexBufferView.BufferLocation = pRenderInfo->m_pIndexBuffer->GetBufferGPUAddress();
+			indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+			indexBufferView.SizeInBytes = pRenderInfo->m_pIndexBuffer->GetByteSize();
+
+			m_pGraphicsCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			m_pGraphicsCommandList->IASetIndexBuffer(&indexBufferView);
+
+			m_pGraphicsCommandList->DrawIndexedInstanced(pRenderInfo->m_pPrimitive->m_uiNumIndices, 1, pRenderInfo->m_pPrimitive->m_uiFirstIndex, pRenderInfo->m_pPrimitive->m_uiFirstVertex, 0);
+		}
+	}
+
+	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	{
+		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+	}
+
+	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_DEPTH_READ);
+
+	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
+}
+
+void App::DrawLightPass()
+{
+	m_pGraphicsCommandList->SetPipelineState(m_pLightPSO.Get());
+
+	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pLightRootSignature.Get());
+
+	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	m_pGraphicsCommandList->ClearRenderTargetView(GetBackBufferView(), clearColor, 0, nullptr);
+
+	m_pGraphicsCommandList->OMSetRenderTargets(1, &GetBackBufferView(), FALSE, nullptr);
+
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_DEFERRED_CB, GetDeferredPerFrameUploadBuffer()->GetBufferGPUAddress());
+
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
+	vertexBufferView.BufferLocation = m_pScreenQuadVertexBufferGPU->GetGPUVirtualAddress();
+	vertexBufferView.StrideInBytes = sizeof(ScreenQuadVertex);
+	vertexBufferView.SizeInBytes = (UINT)sizeof(ScreenQuadVertex) * 4;
+
+	m_pGraphicsCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+
+	m_pGraphicsCommandList->DrawInstanced(4, 1, 0, 0);
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
+
+	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 int App::Run()
@@ -620,6 +882,10 @@ LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		else if ((int)wParam == VK_F2)
 		{
 			Set4xMSAAState(!m_b4xMSAAState);
+		}
+		else if (wParam == VK_SPACE)
+		{
+			m_bRaytrace = !m_bRaytrace;
 		}
 		return 0;
 
@@ -830,13 +1096,6 @@ bool App::InitDirectX3D()
 		return false;
 	}
 
-	m_pRTVHeap = new DescriptorHeap();
-
-	if (m_pRTVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount) == false)
-	{
-		return false;
-	}
-
 	return true;
 }
 
@@ -974,21 +1233,26 @@ bool App::CreateGBufferPSO()
 	psoDesc.SampleDesc.Count = 1;
 	psoDesc.SampleDesc.Quality = 0;
 	psoDesc.DSVFormat = m_DepthStencilFormat;
-	psoDesc.VS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_kwsGBufferVertexName].Get()->GetBufferPointer(), m_Shaders[m_kwsGBufferVertexName].Get()->GetBufferSize());
-	psoDesc.PS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_kwsGBufferPixelName].Get()->GetBufferPointer(), m_Shaders[m_kwsGBufferPixelName].Get()->GetBufferSize());
+	psoDesc.VS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_wsGBufferVertexName].Get()->GetBufferPointer(), m_Shaders[m_wsGBufferVertexName].Get()->GetBufferSize());
 
 	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
 	{
 		psoDesc.RTVFormats[i] = m_GBufferFormats[i];
 	}
 
-	HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pGBufferPSO.GetAddressOf()));
-
-	if (FAILED(hr))
+	for (int i = 0; i < (int)ShaderVersions::COUNT; ++i)
 	{
-		LOG_ERROR(tag, L"Failed to create the GBuffer pipeline state object!");
+		psoDesc.PS.BytecodeLength = m_Shaders[m_GBufferPixelNames[i]]->GetBufferSize();
+		psoDesc.PS.pShaderBytecode = m_Shaders[m_GBufferPixelNames[i]]->GetBufferPointer();
 
-		return false;
+		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pGBufferPSOs[i].GetAddressOf()));
+
+		if (FAILED(hr))
+		{
+			LOG_ERROR(tag, L"Failed to create one of the G buffer pass pipeline state objects!");
+
+			return false;
+		}
 	}
 
 	return true;
@@ -1014,22 +1278,18 @@ bool App::CreateLightPSO()
 	psoDesc.SampleDesc.Quality = m_b4xMSAAState ? (m_uiMSAAQuality - 1) : 0;
 	psoDesc.RTVFormats[0] = m_BackBufferFormat;
 	psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	psoDesc.VS.BytecodeLength = m_Shaders[m_kwsLightVertexName].Get()->GetBufferSize();
-	psoDesc.VS.pShaderBytecode = m_Shaders[m_kwsLightVertexName].Get()->GetBufferPointer();
+	psoDesc.VS.BytecodeLength = m_Shaders[m_wsLightVertexName].Get()->GetBufferSize();
+	psoDesc.VS.pShaderBytecode = m_Shaders[m_wsLightVertexName].Get()->GetBufferPointer();
+	psoDesc.PS.BytecodeLength = m_Shaders[m_wsLightPixelName]->GetBufferSize();
+	psoDesc.PS.pShaderBytecode = m_Shaders[m_wsLightPixelName]->GetBufferPointer();
 
-	for (int i = 0; i < (int)ShaderVersions::COUNT; ++i)
+	HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPSO.GetAddressOf()));
+
+	if (FAILED(hr))
 	{
-		psoDesc.PS.BytecodeLength = m_Shaders[m_LightPixelNames[i]]->GetBufferSize();
-		psoDesc.PS.pShaderBytecode = m_Shaders[m_LightPixelNames[i]]->GetBufferPointer();
+		LOG_ERROR(tag, L"Failed to create light pass pipeline state object!");
 
-		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPSOs[i].GetAddressOf()));
-
-		if (FAILED(hr))
-		{
-			LOG_ERROR(tag, L"Failed to create one of the light pass pipeline state objects!");
-
-			return false;
-		}
+		return false;
 	}
 
 	return true;
@@ -1136,17 +1396,18 @@ bool App::CompileShaders()
 		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS], L"lib_6_3", m_kwsClosestHitEntrypoint, noMetallicRoughness, (int)_countof(noMetallicRoughness)),	//No metallic roughness or anything else
 
 		//G Buffer pass shaders
-		CompileRecord(L"Shaders/GBufferVertex.hlsl", m_kwsGBufferVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_kwsGBufferPixelName, L"ps_6_3", L"main"),	//Pixel shader
+		CompileRecord(L"Shaders/GBufferVertex.hlsl", m_wsGBufferVertexName, L"vs_6_3", L"main"),	//Vertex shader
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL], L"ps_6_3", L"main", normal, (int)_countof(normal)),	//Normal
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS], L"ps_6_3", L"main", noMetallicRoughness, (int)_countof(noMetallicRoughness)),	//No metallic roughness or anything else
+
 
 		//Light pass shaders
-		CompileRecord(L"Shaders/LightVertex.hlsl", m_kwsLightVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::NORMAL], L"ps_6_3", L"main", normal, (int)_countof(normal)),	//Normal
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_LightPixelNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS], L"ps_6_3", L"main", noMetallicRoughness, (int)_countof(noMetallicRoughness)),	//No metallic roughness or anything else
+		CompileRecord(L"Shaders/LightVertex.hlsl", m_wsLightVertexName, L"vs_6_3", L"main"),	//Vertex shader
+		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelName, L"ps_6_3", L"main"),	//Pixel shader
 	};
 
 	for (int i = 0; i < _countof(records); ++i)
@@ -1178,6 +1439,8 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/FlightHelmet/gLTF/FlightHelmet.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
+
+	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	ExecuteCommandList();
 }
@@ -1405,29 +1668,31 @@ bool App::CreateHitGroupShaderTable()
 			{
 				hitGroupRootArgs.IndexCB.Index = pNode->m_Primitives[i]->m_iIndex;
 
-				if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::EMISSIVE))
+				switch (pNode->m_Primitives[i]->m_Attributes)
 				{
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS | PrimitiveAttributes::EMISSIVE:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION]);
-				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
-				{
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL_OCCLUSION]);
-				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::NORMAL) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
-				{
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::METALLIC_ROUGHNESS:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL]);
-				}
-				else if (pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::OCCLUSION) && pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
-				{
+					break;
+
+				case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::OCCLUSION]);
-				}
-				else if(pNode->m_Primitives[i]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS))
-				{
+					break;
+
+				case PrimitiveAttributes::METALLIC_ROUGHNESS:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NOTHING]);
-				}
-				else
-				{
+					break;
+
+				default:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS]);
+					break;
 				}
 
 				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
@@ -1448,6 +1713,7 @@ bool App::CreateHitGroupShaderTable()
 
 bool App::CreateOutputBuffers()
 {
+	//Create raytracing output texture
 	m_pRaytracingOutput->GetResourcePtr()->Reset();
 
 	D3D12_RESOURCE_DESC resDesc = {};
@@ -1477,9 +1743,16 @@ bool App::CreateOutputBuffers()
 		return false;
 	}
 
+	//Create G Buffer textures and depth stencil texture
 	resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
 	Texture** GBuffer;
+	D3D12_CLEAR_VALUE GBufferClear;
+
+	D3D12_CLEAR_VALUE DepthStencilClear;
+	DepthStencilClear.Format = m_DepthStencilDSVFormat;
+	DepthStencilClear.DepthStencil.Depth = 1.0f;
+	DepthStencilClear.DepthStencil.Stencil = 0;
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
@@ -1489,9 +1762,16 @@ bool App::CreateOutputBuffers()
 		{
 			GBuffer[j]->GetResourcePtr()->Reset();
 
+			resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 			resDesc.Format = m_GBufferFormats[j];
 
-			hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(GBuffer[j]->GetResourcePtr()->GetAddressOf()));
+			GBufferClear.Format = m_GBufferFormats[j];
+			GBufferClear.Color[0] = m_GBufferClearColors[j][0];
+			GBufferClear.Color[1] = m_GBufferClearColors[j][1];
+			GBufferClear.Color[2] = m_GBufferClearColors[j][2];
+			GBufferClear.Color[3] = m_GBufferClearColors[j][3];
+
+			hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, &GBufferClear, IID_PPV_ARGS(GBuffer[j]->GetResourcePtr()->GetAddressOf()));
 
 			if (FAILED(hr))
 			{
@@ -1500,8 +1780,20 @@ bool App::CreateOutputBuffers()
 				return false;
 			}
 		}
-	}
 
+		//Create depth stenil buffer
+		resDesc.Format = m_DepthStencilFormat;
+		resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+		hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_DEPTH_READ, &DepthStencilClear, IID_PPV_ARGS(GetDepthStencilBuffer(i)->GetResourcePtr()->GetAddressOf()));
+
+		if (FAILED(hr))
+		{
+			LOG_ERROR(tag, L"Failed to create a depth stencil buffer!");
+
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -1534,7 +1826,7 @@ void App::CreateCBs()
 	{
 		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), false);
 		m_FrameResources[i].m_pLightCBUpload = new UploadBuffer<LightCB>(m_pDevice.Get(), MAX_LIGHTS, false);
-		m_FrameResources[i].m_pPrimitiveIndexCBUpload = new UploadBuffer<PrimitiveIndexCB>(m_pDevice.Get(), 1, true);
+		m_FrameResources[i].m_pPrimitiveIndexCBUpload = new UploadBuffer<PrimitiveIndexCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), true);
 		m_FrameResources[i].m_pDeferredPerFrameCBUpload = new UploadBuffer<DeferredPerFrameCB>(m_pDevice.Get(), 1, true);
 
 		if (m_FrameResources[i].m_pLightCBUpload->CreateSRV(m_pSRVHeap) == false)
@@ -1582,11 +1874,35 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), 0.1f, 1000.0f, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
 
 	ObjectManager::GetInstance()->AddCamera(pCamera);
 
 	ObjectManager::GetInstance()->SetActiveCamera(pCamera->GetName());
+}
+
+void App::CreateScreenQuad()
+{
+	HRESULT hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to reset the graphics command list!");
+
+		return;
+	}
+
+	std::array<ScreenQuadVertex, 4> vertices =
+	{
+		ScreenQuadVertex(XMFLOAT3(-1, 1, 0), XMFLOAT2(0, 0)),	//Top left
+		ScreenQuadVertex(XMFLOAT3(1, 1, 0), XMFLOAT2(1, 0)),	//Top right
+		ScreenQuadVertex(XMFLOAT3(-1, -1, 0), XMFLOAT2(0, 1)),	//Bottom left
+		ScreenQuadVertex(XMFLOAT3(1, -1, 0), XMFLOAT2(1, 1))	//Bottom right
+	};
+
+	m_pScreenQuadVertexBufferGPU = DXRHelper::CreateDefaultBuffer(m_pDevice.Get(), m_pGraphicsCommandList.Get(), vertices.data(), (UINT)sizeof(Vertex) * 4, m_pScreenQuadVertexBufferUploader);
+
+	ExecuteCommandList();
 }
 
 void App::InitScene()
@@ -1896,6 +2212,16 @@ UploadBuffer<PrimitiveIndexCB>* App::GetPrimitiveIndexUploadBuffer(int iIndex)
 	return m_FrameResources[iIndex].m_pPrimitiveIndexCBUpload;
 }
 
+UploadBuffer<DeferredPerFrameCB>* App::GetDeferredPerFrameUploadBuffer()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pDeferredPerFrameCBUpload;
+}
+
+UploadBuffer<DeferredPerFrameCB>* App::GetDeferredPerFrameUploadBuffer(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pDeferredPerFrameCBUpload;
+}
+
 Texture** App::GetGBuffer()
 {
 	return m_FrameResources[m_uiFrameIndex].m_GBuffer;
@@ -1904,6 +2230,51 @@ Texture** App::GetGBuffer()
 Texture** App::GetGBuffer(int iIndex)
 {
 	return m_FrameResources[iIndex].m_GBuffer;
+}
+
+Texture* App::GetDepthStencilBuffer()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pDepthStencilBuffer;
+}
+
+Texture* App::GetDepthStencilBuffer(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pDepthStencilBuffer;
+}
+
+void App::SetDepthStencilBuffer(int iIndex, Texture* pTexture)
+{
+	m_FrameResources[iIndex].m_pDepthStencilBuffer = pTexture;
+}
+
+Descriptor* App::GetDepthStencilBufferView()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pDepthStencilBufferView;
+}
+
+Descriptor* App::GetDepthStencilBufferView(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pDepthStencilBufferView;
+}
+
+Descriptor** App::GetGBufferRTVDescs()
+{
+	return m_FrameResources[m_uiFrameIndex].m_pGBufferRTVDescs;
+}
+
+Descriptor** App::GetGBufferRTVDescs(int iIndex)
+{
+	return m_FrameResources[iIndex].m_pGBufferRTVDescs;
+}
+
+void App::SetDepthStencilBufferView(int iIndex, Descriptor* pDesc)
+{
+	if (m_FrameResources[iIndex].m_pDepthStencilBufferView != nullptr)
+	{
+		delete m_FrameResources[iIndex].m_pDepthStencilBufferView;
+	}
+
+	m_FrameResources[iIndex].m_pDepthStencilBufferView = pDesc;
 }
 
 bool App::CreateSignatures()
@@ -2124,6 +2495,8 @@ void App::PopulateDescriptorHeaps()
 		{
 			GBuffer[j]->CreateSRVDesc(m_pSRVHeap);
 		}
+
+		GetDepthStencilBuffer(i)->CreateSRVDesc(m_pSRVHeap, m_DepthStencilSRVFormat);
 	}
 
 	MeshManager::GetInstance()->CreateDescriptors(m_pSRVHeap);
@@ -2169,6 +2542,24 @@ void App::PopulatePrimitivePerInstanceCB()
 	}
 }
 
+void App::PopulatePrimitiveIndexCB()
+{
+	PrimitiveIndexCB primIndexCB;
+
+	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	{
+		for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
+		{
+			for (int j = 0; j < it->second.size(); ++j)
+			{
+				primIndexCB.Index = (UINT32)it->second[j].m_pPrimitive->m_iIndex;
+
+				GetPrimitiveIndexUploadBuffer(i)->CopyData(primIndexCB.Index, primIndexCB);
+			}
+		}
+	}
+}
+
 void App::PopulateDeferredPerFrameCB()
 {
 	DeferredPerFrameCB deferredPerFrameCB;
@@ -2176,9 +2567,21 @@ void App::PopulateDeferredPerFrameCB()
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		deferredPerFrameCB.NormalIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::NORMAL]->GetSRVDesc()->GetDescriptorIndex();
-		deferredPerFrameCB.TangentIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::TANGENT]->GetSRVDesc()->GetDescriptorIndex();
-		deferredPerFrameCB.TexCoordIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::TEXCOORDS]->GetSRVDesc()->GetDescriptorIndex();
-		deferredPerFrameCB.PrimitiveIndexIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::PRIMITIVE_ID]->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.AlbedoIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::ALBEDO]->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.MetallicRoughnessOcclusion = m_FrameResources[i].m_GBuffer[(int)GBuffer::METALLIC_ROUGHNESS_OCCLUSION]->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.DepthIndex = m_FrameResources[i].m_pDepthStencilBuffer->GetSRVDesc()->GetDescriptorIndex();
+
+		GetDeferredPerFrameUploadBuffer(i)->CopyData(0, deferredPerFrameCB);
+	}
+}
+
+void App::PopulateRenderInfoQueue()
+{
+	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
+
+	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
+	{
+		it->second->CreateRenderInfo(m_RenderInfoQueue);
 	}
 }
 
@@ -2186,8 +2589,25 @@ bool App::CreateDescriptorHeaps()
 {
 	m_pSRVHeap = new DescriptorHeap();
 
-	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer
-	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1 + (s_kuiSwapChainBufferCount * 2) + 1 + (4 * s_kuiSwapChainBufferCount) + 1) == false)
+	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer, 1 extra per in flight frame for depth buffer
+	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1 + (s_kuiSwapChainBufferCount * 2) + 1 + (4 * s_kuiSwapChainBufferCount) + 1 + s_kuiSwapChainBufferCount) == false)
+	{
+		return false;
+	}
+
+
+	m_pRTVHeap = new DescriptorHeap();
+
+	if (m_pRTVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount + ((int)GBuffer::COUNT) * s_kuiSwapChainBufferCount) == false)
+	{
+		return false;
+	}
+
+
+	m_pDSVHeap = new DescriptorHeap();
+
+	//1 desc per in flight frame for depth stencil buffer
+	if (m_pDSVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount) == false)
 	{
 		return false;
 	}

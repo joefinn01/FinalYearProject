@@ -88,7 +88,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     tangent = normalize(tangent - dot(tangent, normalL) * normalL);
     tangent = mul(float4(tangent, 1.0f), primInfo.InvTransposeWorld).xyz;
     
-    normalW = GetNormal(uv, normalW, tangent, Tex2DTable[g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index].NormalIndex], SamLinearClamp);
+    normalW = GetNormal(uv, normalW, tangent, Tex2DTable[geomInfo.NormalIndex], SamLinearClamp);
 #endif
     
     float fMetallic = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).b;

@@ -4,8 +4,8 @@ struct VS_INPUT
 {
     float3 PosL : POSITION;
     float3 NormalL : NORMAL;
-    float2 TexCoords : TEXCOORD;
     float3 TangentL : TANGENT;
+    float2 TexCoords : TEXCOORD;
 };
 
 struct VS_OUTPUT
@@ -16,13 +16,13 @@ struct VS_OUTPUT
     float3 TangentW : TANGENT;
 };
 
-ConstantBuffer<PrimitiveIndexCB> g_PrimitiveIndexCB : register(b1);
+ConstantBuffer<PrimitiveIndexCB> l_PrimitiveIndexCB : register(b1);
 
 VS_OUTPUT main(VS_INPUT input)
 {
     VS_OUTPUT result;
 
-    PrimitivePerFrameCB primPerFrameCB = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][g_PrimitiveIndexCB.Index];
+    PrimitivePerFrameCB primPerFrameCB = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index];
     
     result.PosH = mul(float4(input.PosL, 1.0f), primPerFrameCB.World);
     result.PosH = mul(result.PosH, g_ScenePerFrameCB.ViewProjection);

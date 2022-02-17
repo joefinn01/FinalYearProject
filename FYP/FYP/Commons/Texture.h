@@ -13,7 +13,10 @@ public:
 	Texture(ID3D12Resource* pTextureRes, DXGI_FORMAT textureFormat);
 
 	bool CreateSRVDesc(DescriptorHeap* pHeap);
+	bool CreateSRVDesc(DescriptorHeap* pHeap, DXGI_FORMAT format);
 	void RecreateSRVDesc(DescriptorHeap* pHeap);
+	void RecreateSRVDesc(DescriptorHeap* pHeap, DXGI_FORMAT format);
+
 	bool CreateUAVDesc(DescriptorHeap* pHeap);
 	void RecreateUAVDesc(DescriptorHeap* pHeap);
 

@@ -5,12 +5,16 @@
 #include "Shaders/ConstantBuffers.h"
 
 #include <string>
+#include <unordered_map>
 
 class Timer;
 
 struct Vertex;
 struct Mesh;
 struct GameObjectCB;
+struct RenderInfo;
+
+enum class PrimitiveAttributes : UINT8;
 
 enum class GameObjectType
 {
@@ -28,6 +32,7 @@ public:
 	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
+	virtual void CreateRenderInfo(std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>& renderInfos);
 
 	std::string GetName() const;
 

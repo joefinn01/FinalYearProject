@@ -93,3 +93,8 @@ UINT DescriptorHeap::GetNumDescsAllocated() const
 {
 	return m_uiDescriptorsAllocated;
 }
+
+UINT DescriptorHeap::GetMaxNumDescs() const
+{
+	return m_uiNumDescriptors;
+}

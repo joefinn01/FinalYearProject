@@ -1,4 +1,5 @@
 #include "RasterCommons.hlsli"
+#include "LightingHelper.hlsli"
 
 struct PS_INPUT
 {
@@ -11,21 +12,40 @@ struct PS_INPUT
 struct PS_OUTPUT
 {
     float4 NormalW : SV_TARGET0;
-    float4 TangentW : SV_TARGET1;
-    float2 TexCoords : SV_TARGET2;
-    uint PrimitiveID : SV_Target3;
+    float4 Albedo : SV_TARGET1;
+    float4 MetallicRoughnessOcclusion : SV_TARGET2;
 };
 
-ConstantBuffer<PrimitiveIndexCB> g_PrimitiveIndexCB : register(b1);
+ConstantBuffer<PrimitiveIndexCB> l_PrimitiveIndexCB : register(b1);
 
 PS_OUTPUT main(PS_INPUT input)
 {
     PS_OUTPUT output;
     
-    output.NormalW = float4((normalize(input.NormalW) + 1) * 0.5f, 0.0f);
-    output.TangentW = float4((normalize(input.TangentW) + 1) * 0.5f, 0.0f);
-    output.TexCoords = input.TexCoords;
-    output.PrimitiveID = g_PrimitiveIndexCB.Index;
+    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index];
+    
+    float3 tangentW = normalize(input.TangentW);
+    float3 normalW = normalize(input.NormalW);
+    
+#if NORMAL_MAPPING    
+    normalW = GetNormal(input.TexCoords, normalW, tangentW, Tex2DTable[geomInfo.NormalIndex], SamLinearClamp);
+#endif
+    
+    output.NormalW.xyz = (normalW + 1) * 0.5f;
+    output.Albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, input.TexCoords, 0);
+    
+#if !NO_METALLIC_ROUGHNESS
+    output.MetallicRoughnessOcclusion.xy = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, input.TexCoords, 0).bg;
+#else
+    output.MetallicRoughnessOcclusion.x = 0.5f;
+    output.MetallicRoughnessOcclusion.y = 0.5f;
+#endif
+    
+#if OCCLUSION_MAPPING
+    output.MetallicRoughnessOcclusion.z = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, input.TexCoords, 0).r;
+#else
+    output.MetallicRoughnessOcclusion.z = 1.0f;
+#endif
     
     return output;
 }

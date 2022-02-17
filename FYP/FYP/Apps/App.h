@@ -24,14 +24,15 @@ class Texture;
 
 struct RayGenerationCB;
 struct Vertex;
+struct Primitive;
 
+enum class PrimitiveAttributes : UINT8;
 
 enum class GBuffer
 {
 	NORMAL = 0,
-	TANGENT,
-	TEXCOORDS,
-	PRIMITIVE_ID,
+	ALBEDO,
+	METALLIC_ROUGHNESS_OCCLUSION,
 	COUNT
 };
 
@@ -46,6 +47,10 @@ struct FrameResources
 	UploadBuffer<DeferredPerFrameCB>* m_pDeferredPerFrameCBUpload = nullptr;
 
 	Texture* m_GBuffer[(int)GBuffer::COUNT];
+	Descriptor* m_pGBufferRTVDescs[(int)GBuffer::COUNT];
+
+	Texture* m_pDepthStencilBuffer = nullptr;
+	Descriptor* m_pDepthStencilBufferView;
 };
 
 namespace RaytracingPass
@@ -107,6 +112,13 @@ enum class ShaderVersions
 	COUNT
 };
 
+struct RenderInfo
+{
+	Primitive* m_pPrimitive;
+	UploadBuffer<Vertex>* m_pVertexBuffer;
+	UploadBuffer<UINT>* m_pIndexBuffer;
+};
+
 class App
 {
 public:
@@ -123,6 +135,12 @@ public:
 	virtual void OnResize();
 
 	virtual void Draw();
+
+	void DrawRaytracedPass();
+
+	void DrawDeferredPass();
+	void DrawGBufferPass();
+	void DrawLightPass();
 
 	int Run();
 
@@ -186,11 +204,16 @@ protected:
 
 	void PopulateDescriptorHeaps();
 	void PopulatePrimitivePerInstanceCB();
+	void PopulatePrimitiveIndexCB();
 	void PopulateDeferredPerFrameCB();
+
+	void PopulateRenderInfoQueue();
 
 	bool CheckRaytracingSupport();
 
 	void CreateCameras();
+
+	void CreateScreenQuad();
 
 	void InitScene();
 	void InitConstantBuffers();
@@ -227,8 +250,22 @@ protected:
 	UploadBuffer<PrimitiveIndexCB>* GetPrimitiveIndexUploadBuffer();
 	UploadBuffer<PrimitiveIndexCB>* GetPrimitiveIndexUploadBuffer(int iIndex);
 
+	UploadBuffer<DeferredPerFrameCB>* GetDeferredPerFrameUploadBuffer();
+	UploadBuffer<DeferredPerFrameCB>* GetDeferredPerFrameUploadBuffer(int iIndex);
+
 	Texture** GetGBuffer();
 	Texture** GetGBuffer(int iIndex);
+
+	Texture* GetDepthStencilBuffer();
+	Texture* GetDepthStencilBuffer(int iIndex);
+	void SetDepthStencilBuffer(int iIndex, Texture* pTexture);
+
+	Descriptor* GetDepthStencilBufferView();
+	Descriptor* GetDepthStencilBufferView(int iIndex);
+	void SetDepthStencilBufferView(int iIndex, Descriptor* pDesc);
+
+	Descriptor** GetGBufferRTVDescs();
+	Descriptor** GetGBufferRTVDescs(int iIndex);
 
 	static App* m_pApp;
 
@@ -265,7 +302,7 @@ protected:
 	UINT64 m_uiFenceValue = 0;
 
 	static const UINT32 s_kuiNumUserDescriptorRanges = 16;
-	static const UINT32 s_kuiNumStandardDescriptorRanges = 6 + s_kuiNumUserDescriptorRanges;
+	static const UINT32 s_kuiNumStandardDescriptorRanges = 3 + s_kuiNumUserDescriptorRanges;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 
@@ -276,6 +313,7 @@ protected:
 
 	DescriptorHeap* m_pSRVHeap = nullptr;
 	DescriptorHeap* m_pRTVHeap = nullptr;
+	DescriptorHeap* m_pDSVHeap = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pHitGroupTable;
@@ -323,25 +361,24 @@ protected:
 	};
 
 	//Light pass shader names
-	LPCWSTR m_kwsLightVertexName = L"LightVertex";
-
-	LPCWSTR m_LightPixelNames[(int)ShaderVersions::COUNT] =
-	{
-		L"LightPixel",
-		L"LightPixelNoMetallicRoughness",
-		L"LightPixelNormal",
-		L"LightPixelOcclusion",
-		L"LightPixelNormalOcclusion",
-		L"LightPixelNormalOcclusionEmission",
-	};
+	LPCWSTR m_wsLightVertexName = L"LightVertex";
+	LPCWSTR m_wsLightPixelName = L"LightPixel";
 
 	//G Buffer pass shader names
-	LPCWSTR m_kwsGBufferVertexName = L"GBufferVertex";
-	LPCWSTR m_kwsGBufferPixelName = L"GBufferPixel";
+	LPCWSTR m_wsGBufferVertexName = L"GBufferVertex";
+	LPCWSTR m_GBufferPixelNames[(int)ShaderVersions::COUNT] =
+	{
+		L"GBufferPixel",
+		L"GBufferPixelNoMetallicRoughness",
+		L"GBufferPixelNormal",
+		L"GBufferPixelOcclusion",
+		L"GBufferPixelNormalOcclusion",
+		L"GBufferPixelNormalOcclusionEmission",
+	};
 
 
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSO = nullptr;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSOs[(int)ShaderVersions::COUNT] = { };
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSOs[(int)ShaderVersions::COUNT] = { };
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSO = nullptr;
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> m_ScreenQuadInputDesc;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> m_DefaultInputDesc;
@@ -351,16 +388,37 @@ protected:
 
 	DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 	DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	DXGI_FORMAT m_DepthStencilSRVFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+	DXGI_FORMAT m_DepthStencilDSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
 	DXGI_FORMAT m_GBufferFormats[(int)GBuffer::COUNT] =
 	{
 		DXGI_FORMAT_R8G8B8A8_UNORM,
 		DXGI_FORMAT_R8G8B8A8_UNORM,
-		DXGI_FORMAT_R8G8_UNORM,
-		DXGI_FORMAT_R8_UINT
+		DXGI_FORMAT_R8G8B8A8_UNORM,
+	};
+
+	float m_GBufferClearColors[(int)GBuffer::COUNT][4] =
+	{
+		{0, 0, 0, 1},
+		{0, 0, 0, 1},
+		{0.5f, 0.5f, 1, 0},
 	};
 
 	D3D12_DESCRIPTOR_RANGE1 m_BindlessDescRanges[s_kuiNumStandardDescriptorRanges] = {};
+
+	float m_fCameraNearDepth = 0.1f;
+	float m_fCameraFarDepth = 1000.0f;
+
+	D3D12_VIEWPORT m_Viewport = D3D12_VIEWPORT();
+	D3D12_RECT m_ScissorRect = D3D12_RECT();
+
+	std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>> m_RenderInfoQueue;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferGPU = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;
+
+	bool m_bRaytrace = false;
 
 #if _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> m_pDebug = nullptr;

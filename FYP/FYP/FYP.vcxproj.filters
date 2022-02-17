@@ -130,6 +130,12 @@
     <ClCompile Include="Commons\Mesh.cpp">
       <Filter>Commons</Filter>
     </ClCompile>
+    <ClCompile Include="Commons\RTVDescriptor.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\DSVDescriptor.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -271,6 +277,12 @@
       <Filter>Commons</Filter>
     </ClInclude>
     <ClInclude Include="Commons\AccelerationBuffers.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\RTVDescriptor.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\DSVDescriptor.h">
       <Filter>Commons</Filter>
     </ClInclude>
   </ItemGroup>
