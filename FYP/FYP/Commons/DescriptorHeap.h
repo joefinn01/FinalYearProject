@@ -16,8 +16,8 @@ public:
 	bool Allocate(UINT& uiDescriptorIndex);
 	bool Allocate();
 
-	D3D12_CPU_DESCRIPTOR_HANDLE GetCpuDescriptorHandle(UINT uiIndex) const;
-	D3D12_GPU_DESCRIPTOR_HANDLE GetGpuDescriptorHandle(UINT uiIndex) const;
+	D3D12_CPU_DESCRIPTOR_HANDLE GetCpuDescriptorHandle(UINT uiIndex = 0) const;
+	D3D12_GPU_DESCRIPTOR_HANDLE GetGpuDescriptorHandle(UINT uiIndex = 0) const;
 
 	UINT GetDescriptorSize() const;
 	UINT GetNumDescsAllocated() const;
