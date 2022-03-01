@@ -337,3 +337,5 @@ ASALocalRun/
 *.tlog
 FYP.exe
 *.idb
+
+imgui.ini
