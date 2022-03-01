@@ -77,3 +77,8 @@ UINT Mesh::GetNumIndices() const
 {
 	return m_uiNumIndices;
 }
+
+UINT Mesh::GetNumPrimitives() const
+{
+	return m_uiNumPrimitives;
+}

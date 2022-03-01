@@ -3,10 +3,11 @@
 #include "Helpers/DebugHelper.h"
 #include "Cameras/Camera.h"
 #include "Apps/App.h"
+#include "Commons/Mesh.h"
 
 Tag tag = L"ObjectManager";
 
-bool ObjectManager::AddGameObject(GameObject* pGameObject)
+bool ObjectManager::AddGameObject(GameObject* pGameObject, UINT& uiIndex)
 {
 	if (m_GameObjects.count(pGameObject->GetName()) == 1)
 	{
@@ -14,6 +15,10 @@ bool ObjectManager::AddGameObject(GameObject* pGameObject)
 
 		return false;
 	}
+
+	uiIndex = m_uiCurrentIndex;
+
+	m_uiCurrentIndex += pGameObject->GetMesh()->GetNumPrimitives();
 
 	m_GameObjects[pGameObject->GetName()] = pGameObject;
 

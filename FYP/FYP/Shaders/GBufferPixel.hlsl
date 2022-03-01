@@ -22,7 +22,7 @@ PS_OUTPUT main(PS_INPUT input)
 {
     PS_OUTPUT output;
     
-    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index];
+    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.PrimitiveIndex];
     
     float3 tangentW = normalize(input.TangentW);
     float3 normalW = normalize(input.NormalW);

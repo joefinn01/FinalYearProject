@@ -3,6 +3,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <Windows.h>
 
 class Timer;
 class GameObject;
@@ -14,7 +15,7 @@ class ObjectManager : public Singleton<ObjectManager>
 {
 public:
 	//GameObject methods
-	bool AddGameObject(GameObject* pGameObject);
+	bool AddGameObject(GameObject* pGameObject, UINT& uiIndex);
 
 	bool RemoveGameObject(const std::string& ksName);
 	bool RemoveGameObject(GameObject* pGameObject);
@@ -43,6 +44,8 @@ protected:
 private:
 	std::unordered_map<std::string, GameObject*> m_GameObjects;
 	std::unordered_map<std::string, Camera*> m_Cameras;
+
+	UINT m_uiCurrentIndex = 0;
 
 	Camera* m_pActiveCamera = nullptr;
 };

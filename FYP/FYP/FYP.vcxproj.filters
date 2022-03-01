@@ -160,6 +160,7 @@
     <ClCompile Include="Include\ImGui\imgui_widgets.cpp">
       <Filter>Include\ImGui</Filter>
     </ClCompile>
+    <ClCompile Include="GIVolume.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -333,6 +334,7 @@
     <ClInclude Include="Include\ImGui\imstb_truetype.h">
       <Filter>Include\ImGui</Filter>
     </ClInclude>
+    <ClInclude Include="GIVolume.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

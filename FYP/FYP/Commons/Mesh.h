@@ -164,6 +164,7 @@ public:
 
 	UINT GetNumVertices() const;
 	UINT GetNumIndices() const;
+	UINT GetNumPrimitives() const;
 
 protected:
 
@@ -177,6 +178,7 @@ private:
 
 	UINT m_uiNumVertices;
 	UINT m_uiNumIndices;
+	UINT m_uiNumPrimitives;
 
 	friend class MeshManager;
 };

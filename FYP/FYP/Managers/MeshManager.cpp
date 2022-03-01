@@ -202,6 +202,7 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 		const tinygltf::Mesh& kMesh = kModel.meshes[kNode.mesh];
 
 		m_uiNumPrimitives += kMesh.primitives.size();
+		pMesh->m_uiNumPrimitives += kMesh.primitives.size();
 
 		for (UINT i = 0; i < kMesh.primitives.size(); ++i)
 		{
@@ -364,6 +365,16 @@ bool MeshManager::CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, I
 UINT MeshManager::GetNumPrimitives() const
 {
 	return m_uiNumPrimitives;
+}
+
+UINT MeshManager::GetNumActivePrimitives() const
+{
+	return m_uiNumActivePrimitives;
+}
+
+void MeshManager::AddNumActivePrimitives(UINT uiNumActivePrimitives)
+{
+	m_uiNumActivePrimitives += uiNumActivePrimitives;
 }
 
 bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)

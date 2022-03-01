@@ -48,6 +48,9 @@ public:
 	bool CreateBLAS(ID3D12GraphicsCommandList4* pGraphicsCommandList, ID3D12Device5* pDevice);
 
 	UINT GetNumPrimitives() const;
+	UINT GetNumActivePrimitives() const;
+
+	void AddNumActivePrimitives(UINT uiNumActivePrimitives);
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT>* pIndexBuffer);
@@ -62,5 +65,6 @@ private:
 	std::unordered_map<std::string, Mesh*> m_Meshes;
 
 	UINT m_uiNumPrimitives = 0;
+	UINT m_uiNumActivePrimitives = 0;
 };
 

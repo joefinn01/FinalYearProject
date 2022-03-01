@@ -75,6 +75,8 @@ public:
 
 	DirectX::XMFLOAT3X4 Get3X4WorldMatrix();
 
+	UINT GetIndex();
+
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
 
@@ -91,5 +93,7 @@ private:
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
 
 	Mesh* m_pMesh = nullptr;
+
+	UINT m_uiIndex = 0;
 };
 

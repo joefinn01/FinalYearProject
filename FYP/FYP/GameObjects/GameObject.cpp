@@ -1,5 +1,6 @@
 #include "GameObject.h"
 #include "Managers/ObjectManager.h"
+#include "Managers//MeshManager.h"
 #include "Shaders/Vertices.h"
 #include "Apps/App.h"
 #include "Commons/Mesh.h"
@@ -28,7 +29,8 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 	m_pMesh = pMesh;
 
-	ObjectManager::GetInstance()->AddGameObject(this);
+	ObjectManager::GetInstance()->AddGameObject(this, m_uiIndex);
+	MeshManager::GetInstance()->AddNumActivePrimitives(m_pMesh->GetNumPrimitives());
 
 	return true;
 }
@@ -49,11 +51,18 @@ void GameObject::CreateRenderInfo(std::unordered_map<PrimitiveAttributes, std::v
 	renderInfo.m_pVertexBuffer = m_pMesh->GetVertexUploadBuffer();
 	renderInfo.m_pIndexBuffer = m_pMesh->GetIndexUploadBuffer();
 
+	UINT uiPrimitiveCount = 0;
+
 	for (int i = 0; i < m_pMesh->GetNodes()->size(); ++i)
 	{
 		for (int j = 0; j < m_pMesh->GetNode(i)->m_Primitives.size(); ++j)
 		{
 			renderInfo.m_pPrimitive = m_pMesh->GetNode(i)->m_Primitives[j];
+
+			renderInfo.m_uiInstanceIndex = m_uiIndex + uiPrimitiveCount;
+			renderInfo.m_uiPrimitiveIndex = renderInfo.m_pPrimitive->m_iIndex;
+
+			++uiPrimitiveCount;
 
 			renderInfos[renderInfo.m_pPrimitive->m_Attributes].push_back(renderInfo);
 		}
@@ -259,6 +268,11 @@ XMFLOAT3X4 GameObject::Get3X4WorldMatrix()
 	}
 
 	return matrix;
+}
+
+UINT GameObject::GetIndex()
+{
+	return m_uiIndex;
 }
 
 void GameObject::UpdateAxisVectors()

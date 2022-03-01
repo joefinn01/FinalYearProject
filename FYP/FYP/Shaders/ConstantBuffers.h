@@ -37,7 +37,7 @@ struct ScenePerFrameCB
 	XMFLOAT3 pad;
 };
 
-struct PrimitivePerFrameCB
+struct GameObjectPerFrameCB
 {
 	XMMATRIX World;
 	XMMATRIX InvTransposeWorld;
@@ -45,8 +45,9 @@ struct PrimitivePerFrameCB
 
 struct PrimitiveIndexCB
 {
-	UINT32 Index;
-	XMFLOAT3 pad;
+	UINT32 InstanceIndex;
+	UINT32 PrimitiveIndex;
+	XMFLOAT2 pad;
 };
 
 struct PrimitiveInstanceCB

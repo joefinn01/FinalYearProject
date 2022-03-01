@@ -23,6 +23,7 @@
 #include "Include/ImGui/imgui_impl_dx12.h"
 #include "Include/ImGui/imgui_impl_win32.h"
 #include "Include/ImGui/imgui.h"
+#include "GIVolume.h"
 
 
 #if PIX
@@ -188,11 +189,13 @@ bool App::Init()
 
 	InitImGui();
 
-	CreateCBs();
-
 	CreateScreenQuad();
 
 	InitScene();
+
+	CreateCBs();
+
+	InitConstantBuffers();
 
 	if (CreateAccelerationStructures() == false)
 	{
@@ -665,7 +668,7 @@ void App::DrawGBufferPass()
 				break;
 			}
 
-			m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB, GetPrimitiveIndexUploadBuffer()->GetBufferGPUAddress((UINT)pRenderInfo->m_pPrimitive->m_iIndex));
+			m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB, GetPrimitiveIndexUploadBuffer()->GetBufferGPUAddress((UINT)pRenderInfo->m_uiInstanceIndex));
 
 			vertexBufferView.BufferLocation = pRenderInfo->m_pVertexBuffer->GetBufferGPUAddress();
 			vertexBufferView.StrideInBytes = sizeof(Vertex);
@@ -1474,6 +1477,16 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
 
+	GIVolumeDesc volumeDesc;
+	volumeDesc.Position = XMFLOAT3();
+	volumeDesc.ProbeCounts = XMINT3(5, 5, 5);
+	volumeDesc.ProbeRelocation = false;
+	volumeDesc.ProbeScale = 1.0f;
+	volumeDesc.ProbeSpacing = XMFLOAT3(5, 5, 5);
+	volumeDesc.ProbeTracking = false;
+
+	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get());
+
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	ExecuteCommandList();
@@ -1510,7 +1523,7 @@ bool App::CreateTLAS(bool bUpdate)
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-	inputs.NumDescs = MeshManager::GetInstance()->GetNumPrimitives();
+	inputs.NumDescs = MeshManager::GetInstance()->GetNumActivePrimitives();
 	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
@@ -1542,12 +1555,7 @@ bool App::CreateTLAS(bool bUpdate)
 
 		for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
 		{
-			pMeshNodes = it->second->GetMesh()->GetNodes();
-
-			for (int i = 0; i < pMeshNodes->size(); ++i)
-			{
-				iPrimitiveCount += pMeshNodes->at(i)->m_Primitives.size();
-			}
+			iPrimitiveCount += it->second->GetMesh()->GetNumPrimitives();
 		}
 
 		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), iPrimitiveCount, false);
@@ -1682,16 +1690,20 @@ bool App::CreateHitGroupShaderTable()
 
 	HitGroupRootArgs hitGroupRootArgs;
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
 
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
 	const MeshNode* pNode;
 	Mesh* pMesh;
 
+	UINT uiNumPrimitives = 0;
+
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
 		pMesh = it->second->GetMesh();
+
+		uiNumPrimitives = 0;
 
 		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
 		{
@@ -1700,7 +1712,10 @@ bool App::CreateHitGroupShaderTable()
 			//Assign per primitive information
 			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
 			{
-				hitGroupRootArgs.IndexCB.Index = pNode->m_Primitives[i]->m_iIndex;
+				hitGroupRootArgs.IndexCB.InstanceIndex = it->second->GetIndex() + uiNumPrimitives;
+				hitGroupRootArgs.IndexCB.PrimitiveIndex = pNode->m_Primitives[i]->m_iIndex;
+
+				++uiNumPrimitives;
 
 				switch (pNode->m_Primitives[i]->m_Attributes)
 				{
@@ -1840,11 +1855,11 @@ void App::CreateCBs()
 	//Reserve and populate CB vectors
 
 	//Primitive per frame
-	m_PrimitivePerFrameCBs.reserve(MeshManager::GetInstance()->GetNumPrimitives());
+	m_GameObjectPerFrameCBs.reserve(MeshManager::GetInstance()->GetNumActivePrimitives());
 
-	for (int i = 0; i < MeshManager::GetInstance()->GetNumPrimitives(); ++i)
+	for (int i = 0; i < MeshManager::GetInstance()->GetNumActivePrimitives(); ++i)
 	{
-		m_PrimitivePerFrameCBs.push_back(PrimitivePerFrameCB());
+		m_GameObjectPerFrameCBs.push_back(GameObjectPerFrameCB());
 	}
 
 	//LightCB
@@ -1858,9 +1873,9 @@ void App::CreateCBs()
 	//Create upload buffers
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
-		m_FrameResources[i].m_pPrimitivePerFrameCBUpload = new UploadBuffer<PrimitivePerFrameCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), false);
+		m_FrameResources[i].m_pGameObjectPerFrameCBUpload = new UploadBuffer<GameObjectPerFrameCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), false);
+		m_FrameResources[i].m_pPrimitiveIndexCBUpload = new UploadBuffer<PrimitiveIndexCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), true);
 		m_FrameResources[i].m_pLightCBUpload = new UploadBuffer<LightCB>(m_pDevice.Get(), MAX_LIGHTS, false);
-		m_FrameResources[i].m_pPrimitiveIndexCBUpload = new UploadBuffer<PrimitiveIndexCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumPrimitives(), true);
 		m_FrameResources[i].m_pDeferredPerFrameCBUpload = new UploadBuffer<DeferredPerFrameCB>(m_pDevice.Get(), 1, true);
 
 		if (m_FrameResources[i].m_pLightCBUpload->CreateSRV(m_pSRVHeap) == false)
@@ -1868,7 +1883,7 @@ void App::CreateCBs()
 			return;
 		}
 
-		if (m_FrameResources[i].m_pPrimitivePerFrameCBUpload->CreateSRV(m_pSRVHeap) == false)
+		if (m_FrameResources[i].m_pGameObjectPerFrameCBUpload->CreateSRV(m_pSRVHeap) == false)
 		{
 			return;
 		}
@@ -1958,8 +1973,6 @@ void App::InitScene()
 	pGameObject->Init("BoomBox", XMFLOAT3(5, 0, -5), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
 
 	CreateCameras();
-
-	InitConstantBuffers();
 }
 
 void App::InitConstantBuffers()
@@ -2061,9 +2074,13 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 
 	XMMATRIX invWorld;
 
+	UINT uiNumPrimitives = 0;
+
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
 		pMesh = it->second->GetMesh();
+
+		uiNumPrimitives = 0;
 
 		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
 		{
@@ -2074,16 +2091,18 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 			{
 				invWorld = XMLoadFloat4x4(&pNode->m_Transform) * XMLoadFloat4x4(&it->second->GetWorldMatrix());
 
-				m_PrimitivePerFrameCBs[pNode->m_Primitives[i]->m_iIndex].World = XMMatrixTranspose(invWorld);
+				m_GameObjectPerFrameCBs[it->second->GetIndex() + uiNumPrimitives].World = XMMatrixTranspose(invWorld);
 
 				invWorld.r[3] = XMVectorSet(0, 0, 0, 1);
 
-				m_PrimitivePerFrameCBs[pNode->m_Primitives[i]->m_iIndex].InvTransposeWorld = XMMatrixInverse(nullptr, invWorld);
+				m_GameObjectPerFrameCBs[it->second->GetIndex() + uiNumPrimitives].InvTransposeWorld = XMMatrixInverse(nullptr, invWorld);
+
+				++uiNumPrimitives;
 			}
 		}
 	}
 
-	GetPrimitiveUploadBuffer(uiFrameIndex)->CopyData(0, m_PrimitivePerFrameCBs);
+	GetPrimitiveUploadBuffer(uiFrameIndex)->CopyData(0, m_GameObjectPerFrameCBs);
 }
 
 void App::LogAdapters()
@@ -2265,14 +2284,14 @@ Microsoft::WRL::ComPtr<ID3D12CommandAllocator>* App::GetCommandAllocatorComptr(i
 	return &m_FrameResources[iIndex].m_pCommandAllocator;
 }
 
-UploadBuffer<PrimitivePerFrameCB>* App::GetPrimitiveUploadBuffer()
+UploadBuffer<GameObjectPerFrameCB>* App::GetPrimitiveUploadBuffer()
 {
-	return m_FrameResources[m_uiFrameIndex].m_pPrimitivePerFrameCBUpload;
+	return m_FrameResources[m_uiFrameIndex].m_pGameObjectPerFrameCBUpload;
 }
 
-UploadBuffer<PrimitivePerFrameCB>* App::GetPrimitiveUploadBuffer(int iIndex)
+UploadBuffer<GameObjectPerFrameCB>* App::GetPrimitiveUploadBuffer(int iIndex)
 {
-	return m_FrameResources[iIndex].m_pPrimitivePerFrameCBUpload;
+	return m_FrameResources[iIndex].m_pGameObjectPerFrameCBUpload;
 }
 
 UploadBuffer<LightCB>* App::GetLightUploadBuffer()
@@ -2635,9 +2654,10 @@ void App::PopulatePrimitiveIndexCB()
 		{
 			for (int j = 0; j < it->second.size(); ++j)
 			{
-				primIndexCB.Index = (UINT32)it->second[j].m_pPrimitive->m_iIndex;
+				primIndexCB.InstanceIndex = (UINT32)it->second[j].m_uiInstanceIndex;
+				primIndexCB.PrimitiveIndex = (UINT32)it->second[j].m_uiPrimitiveIndex;
 
-				GetPrimitiveIndexUploadBuffer(i)->CopyData(primIndexCB.Index, primIndexCB);
+				GetPrimitiveIndexUploadBuffer(i)->CopyData(primIndexCB.InstanceIndex, primIndexCB);
 			}
 		}
 	}

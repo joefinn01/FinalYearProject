@@ -38,8 +38,8 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
 #endif
 {
     //Get copy of this primitives geometry information
-    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.Index];
-    PrimitivePerFrameCB primInfo = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index];
+    PrimitiveInstanceCB geomInfo = g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.PrimitiveIndex];
+    GameObjectPerFrameCB primInfo = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.InstanceIndex];
     
     float3 hitPosW = HitWoldPosition();
     float3 viewW = normalize(g_ScenePerFrameCB.EyePosW.xyz - hitPosW);

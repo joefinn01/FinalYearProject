@@ -21,6 +21,7 @@ class Timer;
 class DescriptorHeap;
 class Descriptor;
 class Texture;
+class GIVolume;
 
 struct RayGenerationCB;
 struct Vertex;
@@ -41,7 +42,7 @@ struct FrameResources
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRenderTarget = nullptr;
 
-	UploadBuffer<PrimitivePerFrameCB>* m_pPrimitivePerFrameCBUpload = nullptr;
+	UploadBuffer<GameObjectPerFrameCB>* m_pGameObjectPerFrameCBUpload = nullptr;
 	UploadBuffer<LightCB>* m_pLightCBUpload = nullptr;
 	UploadBuffer<PrimitiveIndexCB>* m_pPrimitiveIndexCBUpload = nullptr;
 	UploadBuffer<DeferredPerFrameCB>* m_pDeferredPerFrameCBUpload = nullptr;
@@ -117,6 +118,8 @@ struct RenderInfo
 	Primitive* m_pPrimitive;
 	UploadBuffer<Vertex>* m_pVertexBuffer;
 	UploadBuffer<UINT>* m_pIndexBuffer;
+	UINT m_uiInstanceIndex;
+	UINT m_uiPrimitiveIndex;
 };
 
 class App
@@ -246,8 +249,8 @@ protected:
 	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr();
 	Microsoft::WRL::ComPtr <ID3D12CommandAllocator>* GetCommandAllocatorComptr(int iIndex);
 
-	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer();
-	UploadBuffer<PrimitivePerFrameCB>* GetPrimitiveUploadBuffer(int iIndex);
+	UploadBuffer<GameObjectPerFrameCB>* GetPrimitiveUploadBuffer();
+	UploadBuffer<GameObjectPerFrameCB>* GetPrimitiveUploadBuffer(int iIndex);
 
 	UploadBuffer<LightCB>* GetLightUploadBuffer();
 	UploadBuffer<LightCB>* GetLightUploadBuffer(int iIndex);
@@ -332,7 +335,7 @@ protected:
 	UploadBuffer<ScenePerFrameCB>* m_pScenePerFrameCBUpload = nullptr;
 	UploadBuffer<PrimitiveInstanceCB>* m_pPrimitiveInstanceCBUpload = nullptr;
 
-	std::vector<PrimitivePerFrameCB> m_PrimitivePerFrameCBs;
+	std::vector<GameObjectPerFrameCB> m_GameObjectPerFrameCBs;
 	std::vector<LightCB> m_LightCBs;
 
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
@@ -423,6 +426,8 @@ protected:
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferGPU = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;
+
+	GIVolume* m_pGIVolume = nullptr;
 
 	bool m_bRaytrace = false;
 

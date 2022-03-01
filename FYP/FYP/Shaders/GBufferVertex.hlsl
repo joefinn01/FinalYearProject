@@ -22,7 +22,7 @@ VS_OUTPUT main(VS_INPUT input)
 {
     VS_OUTPUT result;
 
-    PrimitivePerFrameCB primPerFrameCB = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.Index];
+    GameObjectPerFrameCB primPerFrameCB = g_PrimitivePerFrameCB[g_ScenePerFrameCB.PrimitivePerFrameIndex][l_PrimitiveIndexCB.InstanceIndex];
     
     result.PosH = mul(float4(input.PosL, 1.0f), primPerFrameCB.World);
     result.PosH = mul(result.PosH, g_ScenePerFrameCB.ViewProjection);
