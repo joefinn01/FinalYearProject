@@ -58,6 +58,9 @@ protected:
 private:
 	void CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList);
 
+	void UpdateProbePositions();
+	void UpdateProbeScales();
+
 	DirectX::XMFLOAT3 m_Position = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeTrackingTarget = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeSpacing = DirectX::XMFLOAT3();

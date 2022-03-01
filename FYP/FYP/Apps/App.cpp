@@ -2031,7 +2031,11 @@ void App::DrawImGui()
 	ImGui::NewFrame();
 
 	ImGui::Begin("Options");
+
 	ImGui::Checkbox("Raytrace", &m_bRaytrace);
+
+	m_pGIVolume->ShowUI();
+
 	ImGui::End();
 
 	ImGui::Render();

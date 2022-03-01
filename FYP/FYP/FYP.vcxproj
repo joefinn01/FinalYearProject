@@ -177,6 +177,7 @@
     <ClCompile Include="GIVolume.cpp" />
     <ClCompile Include="Helpers\DebugHelper.cpp" />
     <ClCompile Include="Helpers\DXRHelper.cpp" />
+    <ClCompile Include="Helpers\ImGuiHelper.cpp" />
     <ClCompile Include="Helpers\MathHelper.cpp" />
     <ClCompile Include="Include\ImGui\imgui.cpp" />
     <ClCompile Include="Include\ImGui\imgui_demo.cpp" />
@@ -244,6 +245,7 @@
     <ClInclude Include="GIVolume.h" />
     <ClInclude Include="Helpers\DebugHelper.h" />
     <ClInclude Include="Helpers\DXRHelper.h" />
+    <ClInclude Include="Helpers\ImGuiHelper.h" />
     <ClInclude Include="Helpers\MathHelper.h" />
     <ClInclude Include="Include\DirectX\d3dx12.h" />
     <ClInclude Include="Include\dxguids\dxguids.h" />
