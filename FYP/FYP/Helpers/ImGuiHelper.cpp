@@ -90,3 +90,33 @@ bool ImGuiHelper::DragFloat3(const std::string& label, DirectX::XMFLOAT3& values
 
 	return bUpdated;
 }
+
+void ImGuiHelper::Text(const std::string& label, const char* format, float columnWidth, ...)
+{
+	ImGuiIO& io = ImGui::GetIO();
+
+	ImGui::PushID(label.c_str());
+
+	ImGui::Columns(2);
+	ImGui::SetColumnWidth(0, columnWidth);
+	ImGui::TextUnformatted(label.c_str());
+	ImGui::NextColumn();
+
+	ImGui::PushItemWidth(ImGui::CalcItemWidth());
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
+
+	va_list args;
+	va_start(args, columnWidth);
+
+	ImGui::TextV(format, args);
+
+	va_end(args);
+
+	ImGui::PopItemWidth();
+
+	ImGui::PopStyleVar();
+
+	ImGui::Columns(1);
+
+	ImGui::PopID();
+}
