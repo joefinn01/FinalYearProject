@@ -372,9 +372,19 @@ UINT MeshManager::GetNumActivePrimitives() const
 	return m_uiNumActivePrimitives;
 }
 
+UINT MeshManager::GetNumActiveRaytracedPrimitives() const
+{
+	return m_uiNumActiveRaytracedPrimitives;
+}
+
 void MeshManager::AddNumActivePrimitives(UINT uiNumActivePrimitives)
 {
 	m_uiNumActivePrimitives += uiNumActivePrimitives;
+}
+
+void MeshManager::AddNumActiveRaytracedPrimitives(UINT uiNumActiveRaytracedPrimitives)
+{
+	m_uiNumActiveRaytracedPrimitives += uiNumActiveRaytracedPrimitives;
 }
 
 bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)

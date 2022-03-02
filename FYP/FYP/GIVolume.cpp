@@ -43,6 +43,13 @@ void GIVolume::ShowUI()
 	{
 		UpdateProbeScales();
 	}
+
+	ImGui::Spacing();
+
+	if (ImGuiHelper::Checkbox("Show Probes", m_bShowProbes) == true)
+	{
+		ToggleProbeVisibility();
+	}
 }
 
 void GIVolume::Update(const Timer& kTimer)
@@ -161,7 +168,7 @@ void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 				offset = XMFLOAT3((i * m_ProbeSpacing.x) - totalDimensions.x * 0.5f, (j * m_ProbeSpacing.y) - totalDimensions.y * 0.5f, (k * m_ProbeSpacing.z) - totalDimensions.z * 0.5f);
 
 				pGameObject = new GameObject();
-				pGameObject->Init("Probe" + std::to_string(iIndex), XMFLOAT3(m_Position.x + offset.x, m_Position.y + offset.y, m_Position.z + offset.z), XMFLOAT3(), XMFLOAT3(m_ProbeScale, m_ProbeScale, m_ProbeScale), pMesh);
+				pGameObject->Init("Probe" + std::to_string(iIndex), XMFLOAT3(m_Position.x + offset.x, m_Position.y + offset.y, m_Position.z + offset.z), XMFLOAT3(), XMFLOAT3(m_ProbeScale, m_ProbeScale, m_ProbeScale), pMesh, m_bShowProbes, false);
 
 				m_ProbeGameObjects.push_back(pGameObject);
 			}
@@ -197,6 +204,20 @@ void GIVolume::UpdateProbeScales()
 			for (int k = 0; k < m_ProbeCounts.z; ++k)
 			{
 				m_ProbeGameObjects[i + m_ProbeCounts.x * (j + m_ProbeCounts.z * k)]->SetScale(XMFLOAT3(m_ProbeScale, m_ProbeScale, m_ProbeScale));
+			}
+		}
+	}
+}
+
+void GIVolume::ToggleProbeVisibility()
+{
+	for (int i = 0; i < m_ProbeCounts.x; ++i)
+	{
+		for (int j = 0; j < m_ProbeCounts.y; ++j)
+		{
+			for (int k = 0; k < m_ProbeCounts.z; ++k)
+			{
+				m_ProbeGameObjects[i + m_ProbeCounts.x * (j + m_ProbeCounts.z * k)]->SetIsRendering(m_bShowProbes);
 			}
 		}
 	}

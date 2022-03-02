@@ -15,7 +15,7 @@ GameObject::~GameObject()
 {
 }
 
-bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh)
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bRaytrace)
 {
 	m_sName = sName;
 
@@ -31,6 +31,14 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 	ObjectManager::GetInstance()->AddGameObject(this, m_uiIndex);
 	MeshManager::GetInstance()->AddNumActivePrimitives(m_pMesh->GetNumPrimitives());
+
+	m_bRender = bRender;
+	m_bRaytrace = bRaytrace;
+
+	if (m_bRaytrace == true)
+	{
+		MeshManager::GetInstance()->AddNumActiveRaytracedPrimitives(m_pMesh->GetNumPrimitives());
+	}
 
 	return true;
 }
@@ -273,6 +281,26 @@ XMFLOAT3X4 GameObject::Get3X4WorldMatrix()
 UINT GameObject::GetIndex()
 {
 	return m_uiIndex;
+}
+
+bool GameObject::IsRendering()
+{
+	return m_bRender;
+}
+
+bool GameObject::IsRaytraced()
+{
+	return m_bRaytrace;
+}
+
+void GameObject::SetIsRendering(bool bRender)
+{
+	m_bRender = bRender;
+}
+
+void GameObject::SetIsRaytracing(bool bRaytrace)
+{
+	m_bRaytrace = bRaytrace;
 }
 
 void GameObject::UpdateAxisVectors()

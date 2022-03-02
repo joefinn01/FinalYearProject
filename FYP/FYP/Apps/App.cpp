@@ -206,10 +206,6 @@ bool App::Init()
 	PopulatePrimitivePerInstanceCB();
 	PopulateDeferredPerFrameCB();
 
-	PopulateRenderInfoQueue();
-
-	PopulatePrimitiveIndexCB();
-
 	if (CreateShaderTables() == false)
 	{
 		return false;
@@ -460,36 +456,46 @@ void App::OnResize()
 
 void App::Draw()
 {
-	HRESULT hr = GetCommandAllocator()->Reset();
+	HRESULT hr;
 
-	if (FAILED(hr))
 	{
-		LOG_ERROR(tag, L"Failed to reset the command allocator!");
+		PROFILE("Full Frame");
 
-		return;
-	}
+		hr = GetCommandAllocator()->Reset();
 
-	hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
+		if (FAILED(hr))
+		{
+			LOG_ERROR(tag, L"Failed to reset the command allocator!");
 
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to reset the command list!");
+			return;
+		}
 
-		return;
-	}
+		hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
 
-	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
-	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+		if (FAILED(hr))
+		{
+			LOG_ERROR(tag, L"Failed to reset the command list!");
 
-	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			return;
+		}
 
-	if (m_bRaytrace == true)
-	{
-		DrawRaytracedPass();
-	}
-	else
-	{
-		DrawDeferredPass();
+		PopulateRenderInfoQueue();
+
+		PopulatePrimitiveIndexCB();
+
+		std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
+		m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+
+		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		if (m_bRaytrace == true)
+		{
+			DrawRaytracedPass();
+		}
+		else
+		{
+			DrawDeferredPass();
+		}
 	}
 
 	DrawImGui();
@@ -1558,17 +1564,8 @@ bool App::CreateTLAS(bool bUpdate)
 
 			return false;
 		}
-		 
-		std::vector<MeshNode*>* pMeshNodes;
 
-		int iPrimitiveCount = 0;
-
-		for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
-		{
-			iPrimitiveCount += it->second->GetMesh()->GetNumPrimitives();
-		}
-
-		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), iPrimitiveCount, false);
+		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), false);
 	}
 
 	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress(0);
@@ -1581,6 +1578,11 @@ bool App::CreateTLAS(bool bUpdate)
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
 	{
+		if (it->second->IsRaytraced() == false)
+		{
+			continue;
+		}
+
 		pMeshNodes = it->second->GetMesh()->GetNodes();
 
 		for (int i = 0; i < pMeshNodes->size(); ++i)
@@ -1700,7 +1702,7 @@ bool App::CreateHitGroupShaderTable()
 
 	HitGroupRootArgs hitGroupRootArgs;
 
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
+	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
 
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
@@ -1711,6 +1713,11 @@ bool App::CreateHitGroupShaderTable()
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
+		if (it->second->IsRaytraced() == false)
+		{
+			continue;
+		}
+
 		pMesh = it->second->GetMesh();
 
 		uiNumPrimitives = 0;
@@ -2668,19 +2675,18 @@ void App::PopulatePrimitivePerInstanceCB()
 
 void App::PopulatePrimitiveIndexCB()
 {
+	PROFILE("Populate Primitive Index");
+
 	PrimitiveIndexCB primIndexCB;
 
-	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
+	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
 	{
-		for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
+		for (int i = 0; i < it->second.size(); ++i)
 		{
-			for (int j = 0; j < it->second.size(); ++j)
-			{
-				primIndexCB.InstanceIndex = (UINT32)it->second[j].m_uiInstanceIndex;
-				primIndexCB.PrimitiveIndex = (UINT32)it->second[j].m_uiPrimitiveIndex;
+			primIndexCB.InstanceIndex = (UINT32)it->second[i].m_uiInstanceIndex;
+			primIndexCB.PrimitiveIndex = (UINT32)it->second[i].m_uiPrimitiveIndex;
 
-				GetPrimitiveIndexUploadBuffer(i)->CopyData(primIndexCB.InstanceIndex, primIndexCB);
-			}
+			GetPrimitiveIndexUploadBuffer()->CopyData(primIndexCB.InstanceIndex, primIndexCB);
 		}
 	}
 }
@@ -2702,11 +2708,21 @@ void App::PopulateDeferredPerFrameCB()
 
 void App::PopulateRenderInfoQueue()
 {
+	PROFILE("Populate Render Info");
+
+	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
+	{
+		it->second.clear();
+	}
+
 	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
-		it->second->CreateRenderInfo(m_RenderInfoQueue);
+		if (it->second->IsRendering() == true)
+		{
+			it->second->CreateRenderInfo(m_RenderInfoQueue);
+		}
 	}
 }
 

@@ -61,6 +61,8 @@ private:
 	void UpdateProbePositions();
 	void UpdateProbeScales();
 
+	void ToggleProbeVisibility();
+
 	DirectX::XMFLOAT3 m_Position = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeTrackingTarget = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeSpacing = DirectX::XMFLOAT3();

@@ -49,8 +49,10 @@ public:
 
 	UINT GetNumPrimitives() const;
 	UINT GetNumActivePrimitives() const;
+	UINT GetNumActiveRaytracedPrimitives() const;
 
 	void AddNumActivePrimitives(UINT uiNumActivePrimitives);
+	void AddNumActiveRaytracedPrimitives(UINT uiNumActiveRaytracedPrimitives);
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT>* pIndexBuffer);
@@ -66,5 +68,6 @@ private:
 
 	UINT m_uiNumPrimitives = 0;
 	UINT m_uiNumActivePrimitives = 0;
+	UINT m_uiNumActiveRaytracedPrimitives = 0;
 };
 

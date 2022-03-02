@@ -29,7 +29,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bRaytrace = true);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 	virtual void CreateRenderInfo(std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>& renderInfos);
@@ -77,6 +77,12 @@ public:
 
 	UINT GetIndex();
 
+	bool IsRendering();
+	bool IsRaytraced();
+
+	void SetIsRendering(bool bRender);
+	void SetIsRaytracing(bool bRaytrace);
+
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
 
@@ -91,6 +97,9 @@ private:
 
 	DirectX::XMFLOAT4 m_Up = DirectX::XMFLOAT4(0, 1, 0, 0);
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
+
+	bool m_bRender = true;
+	bool m_bRaytrace = true;
 
 	Mesh* m_pMesh = nullptr;
 
