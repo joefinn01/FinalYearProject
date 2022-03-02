@@ -285,6 +285,9 @@ void App::Update(const Timer& kTimer)
 	UpdatePerFrameCB(m_uiFrameIndex);
 
 	ObjectManager::GetInstance()->Update(kTimer);
+
+	ImGuiIO io = ImGui::GetIO();
+	io.DeltaTime = kTimer.DeltaTime();
 }
 
 void App::OnResize()
@@ -2031,6 +2034,8 @@ void App::DrawImGui()
 	ImGui::NewFrame();
 
 	ImGui::Begin("Options");
+
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
 	ImGui::Checkbox("Raytrace", &m_bRaytrace);
 
