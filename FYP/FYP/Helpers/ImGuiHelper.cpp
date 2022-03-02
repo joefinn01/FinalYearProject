@@ -93,6 +93,8 @@ bool ImGuiHelper::DragFloat3(const std::string& label, DirectX::XMFLOAT3& values
 
 void ImGuiHelper::Text(const std::string& label, const char* format, float columnWidth, ...)
 {
+	bool bUpdated = false;
+
 	ImGuiIO& io = ImGui::GetIO();
 
 	ImGui::PushID(label.c_str());
@@ -119,4 +121,35 @@ void ImGuiHelper::Text(const std::string& label, const char* format, float colum
 	ImGui::Columns(1);
 
 	ImGui::PopID();
+}
+
+bool ImGuiHelper::Checkbox(const std::string& label, bool& value, const float& columnWidth)
+{
+	bool bUpdated = false;
+
+	ImGui::PushID(label.c_str());
+
+	ImGui::Columns(2);
+
+	ImGui::SetColumnWidth(0, columnWidth);
+	ImGui::Text(label.c_str());
+	ImGui::NextColumn();
+
+	ImGui::PushItemWidth(ImGui::CalcItemWidth());
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ 0, 0 });
+
+	if (ImGui::Checkbox("##Checkbox", &value) == true)
+	{
+		bUpdated = true;
+	}
+
+	ImGui::PopItemWidth();
+
+	ImGui::PopStyleVar();
+
+	ImGui::Columns(1);
+
+	ImGui::PopID();
+
+	return bUpdated;
 }
