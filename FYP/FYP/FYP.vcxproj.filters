@@ -161,7 +161,10 @@
       <Filter>Include\ImGui</Filter>
     </ClCompile>
     <ClCompile Include="GIVolume.cpp" />
-    <ClCompile Include="Helpers\ImGuiHelper.cpp" />
+    <ClCompile Include="Commons\ScopedTimer.cpp" />
+    <ClCompile Include="Helpers\ImGuiHelper.cpp">
+      <Filter>Helpers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Apps\App.h">
@@ -336,7 +339,10 @@
       <Filter>Include\ImGui</Filter>
     </ClInclude>
     <ClInclude Include="GIVolume.h" />
-    <ClInclude Include="Helpers\ImGuiHelper.h" />
+    <ClInclude Include="Commons\ScopedTimer.h" />
+    <ClInclude Include="Helpers\ImGuiHelper.h">
+      <Filter>Helpers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

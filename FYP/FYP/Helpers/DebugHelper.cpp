@@ -1,10 +1,15 @@
 #include "DebugHelper.h"
+#include "Commons/ScopedTimer.h"
+#include "Include/ImGui/imgui.h"
+#include "Helpers/ImGuiHelper.h"
 
 #include <stdio.h>
 #include <iostream>
 #include <cstdarg>
 #include <Windows.h>
 #include <sstream>
+
+std::unordered_map<std::string, double> DebugHelper::m_TimerTimes = std::unordered_map<std::string, double>();
 
 #define BUFFER_SIZE 256
 
@@ -48,7 +53,46 @@ void DebugHelper::Log(LogLevel logLevel, std::wstring sTag, std::wstring sText, 
 	va_start(args, sText);
 	vswprintf_s(buffer, BUFFER_SIZE, ss.str().c_str(), args);
 	OutputDebugString(buffer);
-	//fprintf(stdout, buffer);
-	//std::cout << std::endl;
 	va_end(args);
+}
+
+void DebugHelper::AddTime(ScopedTimer* pTimer)
+{
+	if (m_TimerTimes.count(pTimer->GetName()) == 0)
+	{
+		m_TimerTimes[pTimer->GetName()] = 0;
+	}
+
+	m_TimerTimes[pTimer->GetName()] += pTimer->DeltaTime();
+}
+
+void DebugHelper::ResetFrameTimes()
+{
+	for (std::unordered_map<std::string, double>::iterator it = m_TimerTimes.begin(); it != m_TimerTimes.end(); ++it)
+	{
+		it->second = 0;
+	}
+}
+
+std::unordered_map<std::string, double>* DebugHelper::GetFrameTimes()
+{
+	return &m_TimerTimes;
+}
+
+void DebugHelper::ShowUI()
+{
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	ImGui::TextUnformatted("Time (ms)");
+
+	ImGui::Spacing();
+
+	for (std::unordered_map<std::string, double>::iterator it = m_TimerTimes.begin(); it != m_TimerTimes.end(); ++it)
+	{
+		ImGuiHelper::Text(it->first, "%f", 100.0f, it->second * 1000.0f);
+
+		ImGui::Spacing();
+	}
 }

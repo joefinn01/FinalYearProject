@@ -94,7 +94,7 @@ void Timer::Tick()
 	//Update previous time
 	m_iPreviousTime = m_iCurrentTime;
 
-	//Ensure delta time can'tbe negative
+	//Ensure delta time can't be negative
 	if (m_dDetlaTime < 0.0)
 	{
 		m_dDetlaTime = 0.0;

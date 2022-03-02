@@ -168,6 +168,7 @@
     <ClCompile Include="Commons\DSVDescriptor.cpp" />
     <ClCompile Include="Commons\Mesh.cpp" />
     <ClCompile Include="Commons\RTVDescriptor.cpp" />
+    <ClCompile Include="Commons\ScopedTimer.cpp" />
     <ClCompile Include="Commons\ShaderTable.cpp" />
     <ClCompile Include="Commons\SRVDescriptor.cpp" />
     <ClCompile Include="Commons\Texture.cpp" />
@@ -233,6 +234,7 @@
     <ClInclude Include="Commons\DSVDescriptor.h" />
     <ClInclude Include="Commons\Mesh.h" />
     <ClInclude Include="Commons\RTVDescriptor.h" />
+    <ClInclude Include="Commons\ScopedTimer.h" />
     <ClInclude Include="Commons\ShaderRecord.h" />
     <ClInclude Include="Commons\ShaderTable.h" />
     <ClInclude Include="Commons\Singleton.h" />

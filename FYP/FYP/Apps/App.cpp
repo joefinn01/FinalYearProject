@@ -25,7 +25,6 @@
 #include "Include/ImGui/imgui.h"
 #include "GIVolume.h"
 
-
 #if PIX
 #include "pix3.h"
 
@@ -270,6 +269,8 @@ std::wstring App::GetPixGpuCapturePath()
 
 void App::Update(const Timer& kTimer)
 {
+	DebugHelper::ResetFrameTimes();
+
 	InputManager::GetInstance()->Update(kTimer);
 
 	ObjectManager::GetInstance()->GetActiveCamera()->Update(kTimer);
@@ -480,7 +481,7 @@ void App::Draw()
 	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
 	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
-		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	if (m_bRaytrace == true)
 	{
@@ -490,6 +491,8 @@ void App::Draw()
 	{
 		DrawDeferredPass();
 	}
+
+	DrawImGui();
 
 	hr = m_pGraphicsCommandList->Close();
 
@@ -582,6 +585,8 @@ void App::DrawRaytracedPass()
 
 void App::DrawDeferredPass()
 {
+	PROFILE("Deferred Pass");
+
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Deferred Render"));
 
 	DrawGBufferPass();
@@ -593,6 +598,8 @@ void App::DrawDeferredPass()
 
 void App::DrawGBufferPass()
 {
+	PROFILE("G Buffer Pass");
+
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "G Buffer Pass"));
 
 	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pGBufferRootSignature.Get());
@@ -702,6 +709,8 @@ void App::DrawGBufferPass()
 
 void App::DrawLightPass()
 {
+	PROFILE("Light Pass");
+
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Light Pass"));
 
 	m_pGraphicsCommandList->SetPipelineState(m_pLightPSO.Get());
@@ -730,8 +739,6 @@ void App::DrawLightPass()
 	m_pGraphicsCommandList->DrawInstanced(4, 1, 0, 0);
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	DrawImGui();
 
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
@@ -2028,6 +2035,8 @@ void App::DrawImGui()
 	std::vector<ID3D12DescriptorHeap*> heaps = { m_pImGuiSRVHeap->GetHeap().Get() };
 	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET));
+
 	ImGui_ImplDX12_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 
@@ -2041,11 +2050,15 @@ void App::DrawImGui()
 
 	m_pGIVolume->ShowUI();
 
+	DebugHelper::ShowUI();
+
 	ImGui::End();
 
 	ImGui::Render();
 
 	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_pGraphicsCommandList.Get());
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 	PIX_ONLY(PIXEndEvent());
 }
