@@ -13,6 +13,14 @@ enum class LogLevel
 	ERROR_LOG
 };
 
+#define PROFILE_TIMERS 0
+
+#if _DEBUG || PROFILE_TIMERS
+#define PROFILE(name) ScopedTimer profileTimer = ScopedTimer(name);
+#else
+#define PROFILE(name)
+#endif
+
 #if _DEBUG
 
 #define LOG_VERBOSE(tag, format, ...) DebugHelper::Log((LogLevel)0, tag, format, __VA_ARGS__);
@@ -26,8 +34,6 @@ enum class LogLevel
 #define LOG_VERBOSE(tag, format, ...)
 #define LOG_WARNING(tag, format, ...)
 #define LOG_ERROR(tag, format, ...)
-
-#define PROFILE(name)
 
 #endif
 
