@@ -160,6 +160,31 @@ IDxcBlob* DXRHelper::CompileShader(LPCWSTR wsFilename, LPCWSTR wsTargetLevel, LP
 		return nullptr;
 	}
 
+#if _DEBUG
+	Microsoft::WRL::ComPtr<IDxcBlob> pDebugData;
+	Microsoft::WRL::ComPtr<IDxcBlobUtf16> pDebugDataPath;
+	pResult->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(pDebugData.GetAddressOf()), pDebugDataPath.GetAddressOf());
+
+	std::wstring tempWString = std::wstring(pDebugDataPath->GetStringPointer());
+	std::string sPdBName = std::string(tempWString.begin(), tempWString.end());
+
+	sPdBName = std::getenv("LOCALAPPDATA") + std::string("\\Temp\\") + sPdBName;
+
+	FILE* pFile = nullptr;
+	fopen_s(&pFile, sPdBName.c_str(), "wb");
+
+	if (pFile != nullptr)
+	{
+		fwrite(pDebugData->GetBufferPointer(), 1, pDebugData->GetBufferSize(), pFile);
+
+		fclose(pFile);
+	}
+	else
+	{
+		LOG_WARNING(tag, L"Failed to write PDB for shader!");
+	}
+#endif
+
 	return pBlob;
 }
 
