@@ -273,7 +273,7 @@ void App::Update(const Timer& kTimer)
 
 	GameObject* pGameObject = ObjectManager::GetInstance()->GetGameObject("Fish");
 
-	pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
+	//pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
 
 	//pGameObject = ObjectManager::GetInstance()->GetGameObject("WaterBottle");
 
@@ -1492,6 +1492,7 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/FlightHelmet/gLTF/FlightHelmet.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
 	GIVolumeDesc volumeDesc;
 	volumeDesc.Position = XMFLOAT3();
@@ -1539,7 +1540,7 @@ bool App::CreateTLAS(bool bUpdate)
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-	inputs.NumDescs = MeshManager::GetInstance()->GetNumActivePrimitives();
+	inputs.NumDescs = MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives();
 	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
@@ -1974,7 +1975,8 @@ void App::CreateScreenQuad()
 void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
-	MeshManager::GetInstance()->GetMesh("FlightHelmet", pMesh);
+	//MeshManager::GetInstance()->GetMesh("FlightHelmet", pMesh);
+	MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
 
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Fish", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
@@ -2003,7 +2005,7 @@ void App::InitConstantBuffers()
 
 	//m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
 	m_LightCBs[0].Color = XMFLOAT4(0.93f, 0.19f, 0.14f, 1);
-	m_LightCBs[0].Position = XMFLOAT3(0, 0, 0);
+	m_LightCBs[0].Position = XMFLOAT3(0, 10, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
 
 	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
