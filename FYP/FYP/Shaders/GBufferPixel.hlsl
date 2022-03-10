@@ -28,11 +28,11 @@ PS_OUTPUT main(PS_INPUT input)
     float3 normalW = normalize(input.NormalW);
     
 #if NORMAL_MAPPING    
-    normalW = GetNormal(input.TexCoords, normalW, tangentW, Tex2DTable[geomInfo.NormalIndex], SamLinearClamp);
+    normalW = GetNormal(input.TexCoords, normalW, tangentW, Tex2DTable[geomInfo.NormalIndex], SamPointWrap);
 #endif
     
     output.NormalW.xyz = (normalW + 1) * 0.5f;
-    output.Albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, input.TexCoords, 0);
+    output.Albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamPointWrap, input.TexCoords, 0);
     
 #if !NO_METALLIC_ROUGHNESS
     output.MetallicRoughnessOcclusion.xy = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, input.TexCoords, 0).bg;

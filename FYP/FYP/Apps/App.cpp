@@ -1492,7 +1492,6 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/FlightHelmet/gLTF/FlightHelmet.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
 	GIVolumeDesc volumeDesc;
 	volumeDesc.Position = XMFLOAT3();
@@ -1975,8 +1974,7 @@ void App::CreateScreenQuad()
 void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
-	//MeshManager::GetInstance()->GetMesh("FlightHelmet", pMesh);
-	MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
+	MeshManager::GetInstance()->GetMesh("FlightHelmet", pMesh);
 
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Fish", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
@@ -2005,7 +2003,7 @@ void App::InitConstantBuffers()
 
 	//m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
 	m_LightCBs[0].Color = XMFLOAT4(0.93f, 0.19f, 0.14f, 1);
-	m_LightCBs[0].Position = XMFLOAT3(0, 10, 0);
+	m_LightCBs[0].Position = XMFLOAT3(0, 0, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
 
 	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
@@ -2459,7 +2457,7 @@ bool App::CreateLocalSignature()
 	D3D12_ROOT_PARAMETER1 slotRootParameter[RaytracingPass::LocalRootSignatureParams::COUNT] = {};
 
 	//Primitive instance index
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.Num32BitValues = (sizeof(PrimitiveIndexCB) - 1) / (sizeof(UINT32) + 1);
+	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.Num32BitValues = ceil(sizeof(PrimitiveIndexCB) / sizeof(UINT32));
 	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.ShaderRegister = 1;
 	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.RegisterSpace = 0;
 	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;

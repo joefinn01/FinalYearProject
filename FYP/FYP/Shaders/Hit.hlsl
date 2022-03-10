@@ -57,42 +57,41 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
     //Get relevant mesh information at point on tri
     float3 normals[3] =
     {
-        vertices[indices[0]].Normal,
-        vertices[indices[1]].Normal,
-        vertices[indices[2]].Normal
+        vertices[indices.x].Normal,
+        vertices[indices.y].Normal,
+        vertices[indices.z].Normal
     };
     
     float3 normalL = InterpolateAttribute(normals, attr);
     
     //Calculate hit pos UV coords
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    float2 uv = bary.x * vertices[indices[0]].TexCoords + bary.y * vertices[indices[1]].TexCoords + bary.z * vertices[indices[2]].TexCoords;
+    float2 uv = bary.x * vertices[indices.x].TexCoords + bary.y * vertices[indices.y].TexCoords + bary.z * vertices[indices.z].TexCoords;
     
     //Get primitive information from textures
     float3 albedo = pow(Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, uv, 0).rgb, 2.2f).xyz;
-
+    
 #if !NO_METALLIC_ROUGHNESS
     
-    float3 normalW = mul(float4(normalL, 0.0f), primInfo.InvTransposeWorld).xyz;
+    float3 normalW = normalize(mul(float4(normalL, 0.0f), primInfo.InvTransposeWorld).xyz);
     
 #if NORMAL_MAPPING
     float3 tangents[3] =
     {
-        vertices[indices[0]].Tangent.xyz,
-        vertices[indices[1]].Tangent.xyz,
-        vertices[indices[2]].Tangent.xyz
+        vertices[indices.x].Tangent.xyz,
+        vertices[indices.y].Tangent.xyz,
+        vertices[indices.z].Tangent.xyz
     };
     
     float3 tangent = InterpolateAttribute(tangents, attr);
+   
+    tangent = normalize(mul(float4(tangent, 0.0f), primInfo.InvTransposeWorld).xyz);
     
-    tangent = normalize(tangent - dot(tangent, normalL) * normalL);
-    tangent = mul(float4(tangent, 1.0f), primInfo.InvTransposeWorld).xyz;
-    
-    normalW = GetNormal(uv, normalW, tangent, Tex2DTable[geomInfo.NormalIndex], SamLinearClamp);
+    normalW = GetNormal(uv, normalW, tangent, Tex2DTable[geomInfo.NormalIndex], SamPointWrap);
 #endif
     
     float fMetallic = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).b;
-    float fRoughness = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamAnisotropicWrap, uv, 0).g;
+    float fRoughness = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).g;
     
 #if OCCLUSION_MAPPING
     float fOcclusion = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, uv, 0).r;
@@ -131,7 +130,7 @@ void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttribut
         outgoingRadiance += ((fKD * albedo / PI) + specular) * radiance * fNormDotLight;
     }
 #endif
-    
+
 #if OCCLUSION_MAPPING
     payload.color = float4((float3(0.03f, 0.03f, 0.03f) * fOcclusion * albedo) + outgoingRadiance, 1.0f);
 #elif NO_METALLIC_ROUGHNESS

@@ -42,7 +42,7 @@ void MeshManager::CreateDescriptors(DescriptorHeap* pHeap)
 					return;
 				}
 
-				pNode->m_Primitives[i]->m_pVertexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, pNode->m_Primitives[i]->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, sizeof(Vertex), pNode->m_Primitives[i]->m_uiFirstVertex);
+				pNode->m_Primitives[i]->m_pVertexDesc = new SRVDescriptor(uiIndex, pHeap->GetCpuDescriptorHandle(uiIndex), it->second->m_pVertexBuffer->Get(), D3D12_SRV_DIMENSION_BUFFER, pNode->m_Primitives[i]->m_uiNumVertices, DXGI_FORMAT_UNKNOWN, D3D12_BUFFER_SRV_FLAG_NONE, it->second->m_pVertexBuffer->GetStride(), pNode->m_Primitives[i]->m_uiFirstVertex);
 			}
 		}
 
