@@ -1493,16 +1493,6 @@ void App::CreateGeometry()
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
 
-	GIVolumeDesc volumeDesc;
-	volumeDesc.Position = XMFLOAT3();
-	volumeDesc.ProbeCounts = XMINT3(5, 5, 5);
-	volumeDesc.ProbeRelocation = false;
-	volumeDesc.ProbeScale = 1.0f;
-	volumeDesc.ProbeSpacing = XMFLOAT3(5, 5, 5);
-	volumeDesc.ProbeTracking = false;
-
-	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get());
-
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	ExecuteCommandList();
@@ -1989,6 +1979,16 @@ void App::InitScene()
 	pGameObject = new GameObject();
 	pGameObject->Init("BoomBox", XMFLOAT3(5, 0, -5), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
 
+	GIVolumeDesc volumeDesc;
+	volumeDesc.Position = XMFLOAT3();
+	volumeDesc.ProbeCounts = XMUINT3(5, 5, 5);
+	volumeDesc.ProbeRelocation = false;
+	volumeDesc.ProbeScale = 1.0f;
+	volumeDesc.ProbeSpacing = XMFLOAT3(5, 5, 5);
+	volumeDesc.ProbeTracking = false;
+
+	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
+
 	CreateCameras();
 }
 
@@ -2207,6 +2207,32 @@ void App::ExecuteCommandList()
 	m_pCommandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
 
 	FlushCommandQueue();
+}
+
+void App::ResetCommandList()
+{
+	HRESULT hr = GetCommandAllocator()->Reset();
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to reset the command allocator!");
+
+		return;
+	}
+
+	hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to reset the command list!");
+
+		return;
+	}
+
+	std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
+	m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
+
+	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> App::GetStaticSamplers()
@@ -2730,8 +2756,8 @@ bool App::CreateDescriptorHeaps()
 {
 	m_pSRVHeap = new DescriptorHeap();
 
-	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer, 1 extra per in flight frame for depth buffer
-	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1 + (s_kuiSwapChainBufferCount * 2) + 1 + (4 * s_kuiSwapChainBufferCount) + 1 + s_kuiSwapChainBufferCount) == false)
+	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer, 1 extra per in flight frame for depth buffer, 8 for Global illumination
+	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1 + (s_kuiSwapChainBufferCount * 2) + 1 + (4 * s_kuiSwapChainBufferCount) + 1 + s_kuiSwapChainBufferCount + 8) == false)
 	{
 		return false;
 	}
@@ -2745,7 +2771,7 @@ bool App::CreateDescriptorHeaps()
 
 	m_pRTVHeap = new DescriptorHeap();
 
-	if (m_pRTVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount + ((int)GBuffer::COUNT) * s_kuiSwapChainBufferCount) == false)
+	if (m_pRTVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, s_kuiSwapChainBufferCount + ((int)GBuffer::COUNT) * s_kuiSwapChainBufferCount + 2) == false)
 	{
 		return false;
 	}

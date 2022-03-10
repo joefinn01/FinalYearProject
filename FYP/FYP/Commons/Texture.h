@@ -20,6 +20,10 @@ public:
 	bool CreateUAVDesc(DescriptorHeap* pHeap);
 	void RecreateUAVDesc(DescriptorHeap* pHeap);
 
+	bool CreateRTVDesc(DescriptorHeap* pHeap);
+
+	bool CreateResource(UINT64 uiWidth, UINT uiHeight, UINT16 uiMipLevels, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags, D3D12_RESOURCE_STATES state);
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> GetResource() const;
 	Microsoft::WRL::ComPtr<ID3D12Resource>* GetResourcePtr();
 
@@ -38,6 +42,7 @@ protected:
 private:
 	Descriptor* m_pSRVDesc = nullptr;
 	Descriptor* m_pUAVDesc = nullptr;
+	Descriptor* m_pRTVDesc = nullptr;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pTexture = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pUploadHeap = nullptr;

@@ -1,12 +1,16 @@
 #include "GIVolume.h"
 #include "Commons/Mesh.h"
+#include "Commons/Texture.h"
 #include "GameObjects/GameObject.h"
 #include "Managers/MeshManager.h"
 #include "Helpers/ImGuiHelper.h"
+#include "Helpers/DebugHelper.h"
 #include "Include/ImGui/imgui.h"
+#include "Apps/App.h"
 
+Tag tag = L"GIVolume";
 
-GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* pCommandList)
+GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* pCommandList, DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
 {
 	m_Position = kVolumeDesc.Position;
 	
@@ -17,6 +21,8 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 	m_bProbeTracking = kVolumeDesc.ProbeTracking;
 
 	CreateProbeGameObjects(pCommandList);
+
+	CreateTextureAtlases(pSRVHeap, pRTVHeap);
 }
 
 void GIVolume::ShowUI()
@@ -76,7 +82,7 @@ const float& GIVolume::GetProbeScale() const
 	return m_ProbeScale;
 }
 
-const DirectX::XMINT3& GIVolume::GetProbeCounts() const
+const DirectX::XMUINT3& GIVolume::GetProbeCounts() const
 {
 	return m_ProbeCounts;
 }
@@ -122,7 +128,7 @@ void GIVolume::SetProbeScale(const float& kProbeScale)
 	UpdateProbeScales();
 }
 
-void GIVolume::SetProbeCounts(DirectX::XMINT3& kProbeCounts)
+void GIVolume::SetProbeCounts(DirectX::XMUINT3& kProbeCounts)
 {
 	m_ProbeCounts = kProbeCounts;
 }
@@ -144,6 +150,8 @@ void GIVolume::SetIsShowingProbes(bool bIsShowingProbes)
 
 void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 {
+	App::GetApp()->ResetCommandList();
+
 	MeshManager::GetInstance()->LoadMesh("Models/Sphere/gLTF/Sphere.gltf", "Sphere", pCommandList);
 
 	Mesh* pMesh = nullptr;
@@ -174,6 +182,8 @@ void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 			}
 		}
 	}
+
+	App::GetApp()->ExecuteCommandList();
 }
 
 void GIVolume::UpdateProbePositions()
@@ -220,5 +230,212 @@ void GIVolume::ToggleProbeVisibility()
 				m_ProbeGameObjects[i + m_ProbeCounts.x * (j + m_ProbeCounts.z * k)]->SetIsRendering(m_bShowProbes);
 			}
 		}
+	}
+}
+
+bool GIVolume::CreateTextureAtlases(DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
+{
+	if (CreateRayDataAtlas(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (CreateIrradianceAtlas(pSRVHeap, pRTVHeap) == false)
+	{
+		return false;
+	}
+
+	if (CreateDistanceAtlas(pSRVHeap, pRTVHeap) == false)
+	{
+		return false;
+	}
+
+	if (CreateProbeDataAtlas(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool GIVolume::CreateRayDataAtlas(DescriptorHeap* pSRVHeap)
+{
+	if (m_pRayDataAtlas != nullptr)
+	{
+		delete m_pRayDataAtlas;
+		m_pRayDataAtlas = nullptr;
+	}
+
+	m_pRayDataAtlas = new Texture(nullptr, GetRayDataFormat());
+
+	if (m_pRayDataAtlas->CreateResource(m_iRaysPerProbe, m_ProbeCounts.x * m_ProbeCounts.y * m_ProbeCounts.z, 1, GetRayDataFormat(), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
+	{
+		return false;
+	}
+
+	if (m_pRayDataAtlas->CreateSRVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pRayDataAtlas->CreateUAVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool GIVolume::CreateProbeDataAtlas(DescriptorHeap* pSRVHeap)
+{
+	if (m_pProbeDataAtlas != nullptr)
+	{
+		delete m_pProbeDataAtlas;
+		m_pProbeDataAtlas = nullptr;
+	}
+
+	m_pProbeDataAtlas = new Texture(nullptr, GetRayDataFormat());
+
+	if (m_pProbeDataAtlas->CreateResource(m_ProbeCounts.x * m_ProbeCounts.y, m_ProbeCounts.z, 1, GetRayDataFormat(), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) == false)
+	{
+		return false;
+	}
+
+	if (m_pProbeDataAtlas->CreateSRVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pProbeDataAtlas->CreateUAVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool GIVolume::CreateIrradianceAtlas(DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
+{
+	if (m_pIrradianceAtlas != nullptr)
+	{
+		delete m_pIrradianceAtlas;
+		m_pIrradianceAtlas = nullptr;
+	}
+
+	m_pIrradianceAtlas = new Texture(nullptr, GetRayDataFormat());
+
+	if (m_pIrradianceAtlas->CreateResource(m_ProbeCounts.x * m_ProbeCounts.y * (UINT)(m_iIrradianceTexelsPerProbe + 2), m_ProbeCounts.z * (UINT)(m_iIrradianceTexelsPerProbe + 2), 1, GetRayDataFormat(), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) == false)
+	{
+		return false;
+	}
+
+	if (m_pIrradianceAtlas->CreateSRVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pIrradianceAtlas->CreateUAVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pIrradianceAtlas->CreateRTVDesc(pRTVHeap) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool GIVolume::CreateDistanceAtlas(DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
+{
+	if (m_pDistanceAtlas != nullptr)
+	{
+		delete m_pDistanceAtlas;
+		m_pDistanceAtlas = nullptr;
+	}
+
+	m_pDistanceAtlas = new Texture(nullptr, GetRayDataFormat());
+
+	if (m_pDistanceAtlas->CreateResource(m_ProbeCounts.x * m_ProbeCounts.y * (UINT)(m_iDistanceTexelsPerProbe + 2), m_ProbeCounts.z * (UINT)(m_iDistanceTexelsPerProbe + 2), 1, GetRayDataFormat(), D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) == false)
+	{
+		return false;
+	}
+
+	if (m_pDistanceAtlas->CreateSRVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pDistanceAtlas->CreateUAVDesc(pSRVHeap) == false)
+	{
+		return false;
+	}
+
+	if (m_pDistanceAtlas->CreateRTVDesc(pRTVHeap) == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+DXGI_FORMAT GIVolume::GetRayDataFormat()
+{
+	switch(m_AtlasSize)
+	{
+	case AtlasSize::SMALLER:
+		return DXGI_FORMAT_R32G32_FLOAT;
+
+	case AtlasSize::BIGGER:
+		return DXGI_FORMAT_R32G32B32A32_FLOAT;
+
+	default:
+		return DXGI_FORMAT_UNKNOWN;
+	}
+}
+
+DXGI_FORMAT GIVolume::GetIrradianceFormat()
+{
+	switch (m_AtlasSize)
+	{
+	case AtlasSize::SMALLER:
+		return DXGI_FORMAT_R10G10B10A2_UNORM;
+
+	case AtlasSize::BIGGER:
+		return DXGI_FORMAT_R32G32B32A32_FLOAT;
+
+	default:
+		return DXGI_FORMAT_UNKNOWN;
+	}
+}
+
+DXGI_FORMAT GIVolume::GetDistanceFormat()
+{
+	switch (m_AtlasSize)
+	{
+	case AtlasSize::SMALLER:
+		return DXGI_FORMAT_R16G16_FLOAT;
+
+	case AtlasSize::BIGGER:
+		return DXGI_FORMAT_R32G32_FLOAT;
+
+	default:
+		return DXGI_FORMAT_UNKNOWN;
+	}
+}
+
+DXGI_FORMAT GIVolume::GetProbeDataFormat()
+{
+	switch (m_AtlasSize)
+	{
+	case AtlasSize::SMALLER:
+		return DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+	case AtlasSize::BIGGER:
+		return DXGI_FORMAT_R32G32B32A32_FLOAT;
+
+	default:
+		return DXGI_FORMAT_UNKNOWN;
 	}
 }

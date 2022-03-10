@@ -159,6 +159,9 @@ public:
 
 	static App* GetApp();
 
+	void ExecuteCommandList();
+	void ResetCommandList();
+
 protected:
 	bool InitWindow();
 	bool InitDirectX3D();
@@ -231,8 +234,6 @@ protected:
 	void LogAdapters();
 	void LogAdapterOutputs(IDXGIAdapter* pAdapter, bool bSaveSettings);
 	void LogOutputInfo(IDXGIOutput* pOutput, DXGI_FORMAT format, bool bSaveSettings);
-
-	void ExecuteCommandList();
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
