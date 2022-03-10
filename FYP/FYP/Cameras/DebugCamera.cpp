@@ -74,6 +74,11 @@ void DebugCamera::OnKeyDown(void* pObject, int iKeycode)
 		}
 		break;
 
+	case VK_SHIFT:
+		pCamera->m_fMovementSpeed *= 2.0f;
+
+		break;
+
 	default:
 		break;
 	}
@@ -81,6 +86,18 @@ void DebugCamera::OnKeyDown(void* pObject, int iKeycode)
 
 void DebugCamera::OnKeyUp(void* pObject, int iKeycode)
 {
+	DebugCamera* pCamera = (DebugCamera*)pObject;
+
+	switch (iKeycode)
+	{
+	case VK_SHIFT:
+		pCamera->m_fMovementSpeed *= 0.5f;
+
+		break;
+
+	default:
+		break;
+	}
 }
 
 void DebugCamera::OnKeyHeld(void* pObject, int iKeycode, const Timer& kTimer)
