@@ -384,5 +384,11 @@
     <FxCompile Include="Shaders\LightVertex.hlsl">
       <Filter>Shaders\Raster</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\ProbeHelper.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\RaytracedLightingHelper.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

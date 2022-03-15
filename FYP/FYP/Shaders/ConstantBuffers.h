@@ -33,8 +33,8 @@ struct ScenePerFrameCB
 	UINT32 PrimitivePerInstanceIndex;
 	UINT32 ScreenWidth;
 
+	XMFLOAT3 EyeDirection;
 	UINT32 ScreenHeight;
-	XMFLOAT3 pad;
 };
 
 struct GameObjectPerFrameCB
@@ -68,6 +68,24 @@ struct DeferredPerFrameCB
 	UINT32 AlbedoIndex;
 	UINT32 MetallicRoughnessOcclusion;
 	UINT32 DepthIndex;
+};
+
+struct RaytracePerFrameCB
+{
+	XMINT3 ProbeCounts;
+	UINT32 RaysPerProbe;
+
+	XMFLOAT3 ProbeSpacing;
+	float MaxRayDistance;
+
+	XMFLOAT3 VolumePosition;
+	int RayDataFormat;
+
+	XMFLOAT3 MissRadiance;
+	float NormalBias;
+
+	float ViewBias;
+	XMFLOAT3 pad;
 };
 
 #endif // CONSTANT_BUFFERS_H

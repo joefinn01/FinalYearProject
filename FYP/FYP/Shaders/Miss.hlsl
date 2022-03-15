@@ -1,7 +1,7 @@
 #include "RaytracingCommons.hlsli"
 
 [shader("miss")]
-void Miss(inout RayPayload payload)
+void Miss(inout PackedPayload packedPayload)
 {
-    payload.color = float4(0.0f, 0.2f, 0.4f, 1.0f);
+    packedPayload.HitDistance = -1.0f;
 }

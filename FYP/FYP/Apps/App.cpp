@@ -153,11 +153,6 @@ bool App::Init()
 		return false;
 	}
 
-	if (CreateStateObject() == false)
-	{
-		return false;
-	}
-
 	CreateGeometry();
 
 	if (CreateDescriptorHeaps() == false)
@@ -196,20 +191,10 @@ bool App::Init()
 
 	InitConstantBuffers();
 
-	if (CreateAccelerationStructures() == false)
-	{
-		return false;
-	}
-
 	PopulateDescriptorHeaps();
 
 	PopulatePrimitivePerInstanceCB();
 	PopulateDeferredPerFrameCB();
-
-	if (CreateShaderTables() == false)
-	{
-		return false;
-	}
 
 	OnResize();
 
@@ -282,6 +267,8 @@ void App::Update(const Timer& kTimer)
 	UpdatePerFrameCB(m_uiFrameIndex);
 
 	ObjectManager::GetInstance()->Update(kTimer);
+
+	m_pGIVolume->Update(kTimer);
 
 	ImGuiIO io = ImGui::GetIO();
 	io.DeltaTime = kTimer.DeltaTime();
@@ -488,14 +475,9 @@ void App::Draw()
 
 		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		if (m_bRaytrace == true)
-		{
-			DrawRaytracedPass();
-		}
-		else
-		{
-			DrawDeferredPass();
-		}
+		DrawDeferredPass();
+
+		m_pGIVolume->Draw(m_pSRVHeap, m_pScenePerFrameCBUpload, m_pGraphicsCommandList.Get());
 	}
 
 	DrawImGui();
@@ -539,54 +521,6 @@ void App::Draw()
 	m_uiFrameIndex = (m_uiFrameIndex + 1) % s_kuiSwapChainBufferCount;
 
 	FlushCommandQueue();
-}
-
-void App::DrawRaytracedPass()
-{
-	if (CreateTLAS(true) == false)
-	{
-		return;
-	}
-
-	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Raytraced Render"));
-
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-
-	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
-	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
-	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
-	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
-	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
-	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
-	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
-	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
-	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
-	dispatchDesc.Width = WindowManager::GetInstance()->GetWindowWidth();
-	dispatchDesc.Height = WindowManager::GetInstance()->GetWindowHeight();
-	dispatchDesc.Depth = 1;
-
-	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
-
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::OUTPUT, m_pSRVHeap->GetGpuDescriptorHandle(m_pRaytracingOutput->GetUAVDesc()->GetDescriptorIndex()));
-	m_pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle(0));
-
-	m_pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
-
-	m_pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
-
-	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
-
-	m_pGraphicsCommandList->DispatchRays(&dispatchDesc);
-
-	//Copy to back buffer
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_pRaytracingOutput->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE));
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST));
-
-	m_pGraphicsCommandList->CopyResource(GetBackBuffer(), m_pRaytracingOutput->GetResource().Get());
-
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT));
-
-	PIX_ONLY(PIXEndEvent());
 }
 
 void App::DrawDeferredPass()
@@ -936,10 +870,6 @@ LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
 			Set4xMSAAState(!m_b4xMSAAState);
 		}
-		else if (wParam == VK_SPACE)
-		{
-			m_bRaytrace = !m_bRaytrace;
-		}
 		return 0;
 
 	case WM_KEYDOWN:
@@ -965,7 +895,7 @@ ID3D12GraphicsCommandList4* App::GetGraphicsCommandList()
 	return m_pGraphicsCommandList.Get();
 }
 
-ID3D12Device* App::GetDevice()
+ID3D12Device5* App::GetDevice()
 {
 	return m_pDevice.Get();
 }
@@ -973,6 +903,16 @@ ID3D12Device* App::GetDevice()
 App* App::GetApp()
 {
 	return m_pApp;
+}
+
+const UINT App::GetNumStandardDescriptorRanges() const
+{
+	return s_kuiNumStandardDescriptorRanges;
+}
+
+const UINT App::GetNumUserDescriptorRanges() const
+{
+	return s_kuiNumUserDescriptorRanges;
 }
 
 bool App::InitWindow()
@@ -1195,68 +1135,6 @@ void App::FlushCommandQueue()
 	}
 }
 
-bool App::CreateStateObject()
-{
-	CD3DX12_STATE_OBJECT_DESC pipelineDesc = CD3DX12_STATE_OBJECT_DESC(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
-
-	//Associate shaders with pipeline and create hit groups
-	AssociateShader(m_kwsRayGenName, m_kwsRayGenName, pipelineDesc);
-
-	AssociateShader(m_kwsMissName, m_kwsMissName, pipelineDesc);
-
-	for (int i = 0; i < (int)ShaderVersions::COUNT; ++i)
-	{
-		AssociateShader(m_ClosestHitNames[i], m_ClosestHitNames[i], pipelineDesc);
-		CreateHitGroup(m_ClosestHitNames[i], m_HitGroupNames[i], pipelineDesc);
-	}
-
-	//Do shader config stuff
-	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT* pShaderConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
-	pShaderConfig->Config(sizeof(XMFLOAT4), sizeof(XMFLOAT2));
-
-	//Set root signatures
-
-	//Local
-	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT* pLocalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
-	pLocalRootSignature->SetRootSignature(m_pLocalRootSignature.Get());
-
-	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT* pAssociation = pipelineDesc.CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
-	pAssociation->SetSubobjectToAssociate(*pLocalRootSignature);
-
-	for (int i = 0; i < (int)ShaderVersions::COUNT; ++i)
-	{
-		pAssociation->AddExport(m_HitGroupNames[i]);
-	}
-
-	//Global
-	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
-	pGlobalRootSignature->SetRootSignature(m_pGlobalRootSignature.Get());
-
-	//Do pipeline config
-	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT* pPipelineConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT>();
-	pPipelineConfig->Config(1);
-
-	HRESULT hr = m_pDevice->CreateStateObject(pipelineDesc, IID_PPV_ARGS(&m_pStateObject));
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to create the raytracing pipeline object!");
-
-		return false;
-	}
-
-	hr = m_pStateObject.As(&m_pStateObjectProps);
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to get raytracing pipeline properties from object!");
-
-		return false;
-	}
-
-	return true;
-}
-
 bool App::CreatePSOs()
 {
 	if (CreateGBufferPSO() == false)
@@ -1384,26 +1262,6 @@ void App::CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport,  CD3DX12_STAT
 
 bool App::CompileShaders()
 {
-	struct CompileRecord
-	{
-		CompileRecord(LPCWSTR wsFilename, LPCWSTR wsShaderName, LPCWSTR wsShaderVersion, LPCWSTR wsEntrypoint = L"", LPCWSTR* pDefines = nullptr, int iDefineCount = 0)
-		{
-			Filepath = wsFilename;
-			ShaderName = wsShaderName;
-			Entrypoint = wsEntrypoint;
-			ShaderVersion = wsShaderVersion;
-			Defines = pDefines;
-			NumDefines = iDefineCount;
-		}
-
-		LPCWSTR Filepath;
-		LPCWSTR ShaderName;
-		LPCWSTR Entrypoint;
-		LPCWSTR ShaderVersion;
-		LPCWSTR* Defines;
-		int NumDefines;
-	};
-
 	ComPtr<IDxcBlob> pBlob;
 
 	//Create different preprocessor define configs.
@@ -1438,16 +1296,6 @@ bool App::CompileShaders()
 	//Create array of shaders to compile
 	CompileRecord records[] =
 	{
-		//Raytracing pass shaders
-		CompileRecord(L"Shaders/RayGen.hlsl", m_kwsRayGenName, L"lib_6_3"),
-		CompileRecord(L"Shaders/Miss.hlsl", m_kwsMissName, L"lib_6_3"),
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NOTHING], L"lib_6_3"),	//Nothing
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NORMAL], L"lib_6_3", m_kwsClosestHitEntrypoint, normal, (int)_countof(normal)),	//Normal
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::OCCLUSION], L"lib_6_3", m_kwsClosestHitEntrypoint, occlusion, (int)_countof(occlusion)),	//Occlusion
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NORMAL_OCCLUSION], L"lib_6_3", m_kwsClosestHitEntrypoint, normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"lib_6_3", m_kwsClosestHitEntrypoint, normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS], L"lib_6_3", m_kwsClosestHitEntrypoint, noMetallicRoughness, (int)_countof(noMetallicRoughness)),	//No metallic roughness or anything else
-
 		//G Buffer pass shaders
 		CompileRecord(L"Shaders/GBufferVertex.hlsl", m_wsGBufferVertexName, L"vs_6_3", L"main"),	//Vertex shader
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
@@ -1489,282 +1337,13 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/FlightHelmet/gLTF/FlightHelmet.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	ExecuteCommandList();
-}
-
-bool App::CreateAccelerationStructures()
-{
-	HRESULT hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to reset the graphics command list!");
-
-		return false;
-	}
-
-	if (MeshManager::GetInstance()->CreateBLAS(m_pGraphicsCommandList.Get(), m_pDevice.Get()) == false)
-	{
-		return false;
-	}
-
-	if (CreateTLAS(false) == false)
-	{
-		return false;
-	}
-
-	ExecuteCommandList();
-
-	return true;
-}
-
-bool App::CreateTLAS(bool bUpdate)
-{
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-	inputs.NumDescs = MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives();
-	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-	m_pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
-
-	if (bUpdate == true)
-	{
-		m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
-	}
-	else
-	{
-		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_TopLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
-		{
-			LOG_ERROR(tag, L"Failed to create the top level acceleration structure scratch buffer!");
-
-			return false;
-		}
-
-		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_TopLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
-		{
-			LOG_ERROR(tag, L"Failed to create the top level acceleration structure result buffer!");
-
-			return false;
-		}
-
-		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), false);
-	}
-
-	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress(0);
-
-	int iCount = 0;
-
-	std::vector<MeshNode*>* pMeshNodes;
-
-	XMFLOAT3X4 world;
-
-	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
-	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
-		pMeshNodes = it->second->GetMesh()->GetNodes();
-
-		for (int i = 0; i < pMeshNodes->size(); ++i)
-		{
-			for (int j = 0; j < pMeshNodes->at(i)->m_Primitives.size(); ++j)
-			{
-				D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-
-				XMStoreFloat3x4(&world, XMMatrixMultiply(XMLoadFloat4x4(&pMeshNodes->at(i)->m_Transform), XMLoadFloat4x4(&it->second->GetWorldMatrix())));
-
-				for (int j = 0; j < 3; ++j)
-				{
-					for (int k = 0; k < 4; ++k)
-					{
-						instanceDesc.Transform[j][k] = world.m[j][k];
-					}
-				}
-
-				instanceDesc.AccelerationStructure = pMeshNodes->at(i)->m_Primitives[j]->m_BottomLevel.m_pResult->GetGPUVirtualAddress();
-				instanceDesc.Flags = 0;
-				instanceDesc.InstanceID = iCount;
-				instanceDesc.InstanceContributionToHitGroupIndex = iCount;
-				instanceDesc.InstanceMask = 0xFF;
-
-				m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
-
-				++iCount;
-			}
-		}
-	}
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-	buildDesc.Inputs = inputs;
-	buildDesc.DestAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
-	buildDesc.ScratchAccelerationStructureData = m_TopLevelBuffer.m_pScratch->GetGPUVirtualAddress();
-
-	if (bUpdate == true)
-	{
-		buildDesc.SourceAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
-
-		buildDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-	}
-
-	m_pGraphicsCommandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
-
-	return true;
-}
-
-bool App::CreateShaderTables()
-{
-	if (CreateRayGenShaderTable() == false)
-	{
-		return false;
-	}
-
-	if (CreateMissShaderTable() == false)
-	{
-		return false;
-	}
-
-	if (CreateHitGroupShaderTable() == false)
-	{
-		return false;
-	}
-
-	return true;
-}
-
-bool App::CreateRayGenShaderTable()
-{
-	void* pRayGenIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsRayGenName);
-
-	ShaderTable shaderTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pRayGenIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
-	{
-		LOG_ERROR(tag, L"Failed to add a ray gen shader record!");
-
-		return false;
-	}
-
-	m_pRayGenTable = shaderTable.GetBuffer();
-	m_uiRayGenRecordSize = shaderTable.GetRecordSize();
-
-	return true;
-}
-
-bool App::CreateMissShaderTable()
-{
-	void* pMissIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_kwsMissName);
-
-	ShaderTable shaderTable = ShaderTable(m_pDevice.Get(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
-
-	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pMissIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
-	{
-		LOG_ERROR(tag, L"Failed to add a miss shader record!");
-
-		return false;
-	}
-
-	m_pMissTable = shaderTable.GetBuffer();
-	m_uiMissRecordSize = shaderTable.GetRecordSize();
-
-	return true;
-}
-
-bool App::CreateHitGroupShaderTable()
-{
-	void* pHitGroupIdentifier = nullptr;
-
-	struct HitGroupRootArgs
-	{
-		PrimitiveIndexCB IndexCB;
-	};
-
-	HitGroupRootArgs hitGroupRootArgs;
-
-	ShaderTable hitGroupTable = ShaderTable(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
-
-	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
-
-	const MeshNode* pNode;
-	Mesh* pMesh;
-
-	UINT uiNumPrimitives = 0;
-
-	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
-	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
-		pMesh = it->second->GetMesh();
-
-		uiNumPrimitives = 0;
-
-		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
-		{
-			pNode = pMesh->GetNode(i);
-
-			//Assign per primitive information
-			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
-			{
-				hitGroupRootArgs.IndexCB.InstanceIndex = it->second->GetIndex() + uiNumPrimitives;
-				hitGroupRootArgs.IndexCB.PrimitiveIndex = pNode->m_Primitives[i]->m_iIndex;
-
-				++uiNumPrimitives;
-
-				switch (pNode->m_Primitives[i]->m_Attributes)
-				{
-				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS | PrimitiveAttributes::EMISSIVE:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION]);
-					break;
-
-				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL_OCCLUSION]);
-					break;
-
-				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::METALLIC_ROUGHNESS:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NORMAL]);
-					break;
-
-				case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::OCCLUSION]);
-					break;
-
-				case PrimitiveAttributes::METALLIC_ROUGHNESS:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NOTHING]);
-					break;
-
-				default:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS]);
-					break;
-				}
-
-				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
-				{
-					LOG_ERROR(tag, L"Failed to add a hit group shader record!");
-
-					return false;
-				}
-			}
-		}
-	}
-
-	m_pHitGroupTable = hitGroupTable.GetBuffer();
-	m_uiHitGroupRecordSize = hitGroupTable.GetRecordSize();
-
-	return true;
 }
 
 bool App::CreateOutputBuffers()
@@ -1981,7 +1560,7 @@ void App::InitScene()
 
 	GIVolumeDesc volumeDesc;
 	volumeDesc.Position = XMFLOAT3();
-	volumeDesc.ProbeCounts = XMUINT3(5, 5, 5);
+	volumeDesc.ProbeCounts = XMINT3(5, 5, 5);
 	volumeDesc.ProbeRelocation = false;
 	volumeDesc.ProbeScale = 1.0f;
 	volumeDesc.ProbeSpacing = XMFLOAT3(5, 5, 5);
@@ -2053,8 +1632,6 @@ void App::DrawImGui()
 
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
-	ImGui::Checkbox("Raytrace", &m_bRaytrace);
-
 	m_pGIVolume->ShowUI();
 
 	DebugHelper::ShowUI();
@@ -2084,6 +1661,7 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 	XMMATRIX world = XMLoadFloat4x4(&pCamera->GetViewProjectionMatrix());
 
 	m_PerFrameCBs[uiFrameIndex].EyePosW = pCamera->GetPosition();
+	m_PerFrameCBs[uiFrameIndex].EyeDirection = pCamera->GetForwardVector();
 	m_PerFrameCBs[uiFrameIndex].InvViewProjection = XMMatrixTranspose(XMMatrixInverse(nullptr, world));
 	m_PerFrameCBs[uiFrameIndex].ViewProjection = XMMatrixTranspose(world);
 	m_PerFrameCBs[uiFrameIndex].NumLights = (int)m_uiNumLights;
@@ -2235,58 +1813,9 @@ void App::ResetCommandList()
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
-std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> App::GetStaticSamplers()
+UINT App::GetFrameIndex() const
 {
-	const CD3DX12_STATIC_SAMPLER_DESC pointWrap(
-		0, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
-		1, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
-		2, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC linearClamp(
-		3, // shaderRegister
-		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
-
-	const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
-		4, // shaderRegister
-		D3D12_FILTER_ANISOTROPIC, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressW
-		0.0f,                             // mipLODBias
-		8);                               // maxAnisotropy
-
-	const CD3DX12_STATIC_SAMPLER_DESC anisotropicClamp(
-		5, // shaderRegister
-		D3D12_FILTER_ANISOTROPIC, // filter
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
-		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
-		0.0f,                              // mipLODBias
-		8);                                // maxAnisotropy
-
-	return {
-		pointWrap, pointClamp,
-		linearWrap, linearClamp,
-		anisotropicWrap, anisotropicClamp };
+	return m_uiFrameIndex;
 }
 
 ID3D12Resource* App::GetBackBuffer() const
@@ -2436,34 +1965,6 @@ void App::SetDepthStencilBufferView(int iIndex, Descriptor* pDesc)
 
 bool App::CreateSignatures()
 {
-	//Populate bindless ranges so can be reused for all signatures
-	UINT32 userIndex = s_kuiNumStandardDescriptorRanges - s_kuiNumUserDescriptorRanges;
-	for (UINT32 i = 0; i < s_kuiNumStandardDescriptorRanges; ++i)
-	{
-		m_BindlessDescRanges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-		m_BindlessDescRanges[i].NumDescriptors = UINT_MAX;
-		m_BindlessDescRanges[i].BaseShaderRegister = 0;
-		m_BindlessDescRanges[i].RegisterSpace = i;
-		m_BindlessDescRanges[i].OffsetInDescriptorsFromTableStart = 0;
-		m_BindlessDescRanges[i].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
-
-		if (i >= userIndex)
-		{
-			m_BindlessDescRanges[i].RegisterSpace = (i - userIndex) + 100;
-		}
-	}
-
-	//Raytracing signatures
-	if (CreateGlobalSignature() == false)
-	{
-		return false;
-	}
-
-	if (CreateLocalSignature() == false)
-	{
-		return false;
-	}
-
 	//Deferred pass signatures
 	if (CreateGBufferSignature() == false)
 	{
@@ -2478,61 +1979,6 @@ bool App::CreateSignatures()
 	return true;
 }
 
-bool App::CreateLocalSignature()
-{
-	D3D12_ROOT_PARAMETER1 slotRootParameter[RaytracingPass::LocalRootSignatureParams::COUNT] = {};
-
-	//Primitive instance index
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.Num32BitValues = ceil(sizeof(PrimitiveIndexCB) / sizeof(UINT32));
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.ShaderRegister = 1;
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].Constants.RegisterSpace = 0;
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-	slotRootParameter[RaytracingPass::LocalRootSignatureParams::INDEX].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-	return CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), nullptr, 0, m_pLocalRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
-}
-
-bool App::CreateGlobalSignature()
-{
-	D3D12_DESCRIPTOR_RANGE1 outputRange[1] = {};
-	outputRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-	outputRange[0].NumDescriptors = 1;
-	outputRange[0].BaseShaderRegister = 0;
-	outputRange[0].RegisterSpace = 0;
-	outputRange[0].OffsetInDescriptorsFromTableStart = 0;
-
-	D3D12_ROOT_PARAMETER1 slotRootParameter[RaytracingPass::GlobalRootSignatureParams::COUNT] = {};
-
-	//SRV descriptors
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = m_BindlessDescRanges;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = s_kuiNumStandardDescriptorRanges;
-
-	//Acceleration structure
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].Descriptor.ShaderRegister = 0;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].Descriptor.RegisterSpace = 200;
-
-	//UAV descriptors
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::OUTPUT].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::OUTPUT].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::OUTPUT].DescriptorTable.pDescriptorRanges = outputRange;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::OUTPUT].DescriptorTable.NumDescriptorRanges = _countof(outputRange);
-
-	//Scene per frame CB
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
-	slotRootParameter[RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
-
-	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
-
-	return CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pGlobalRootSignature.GetAddressOf());
-}
-
 bool App::CreateGBufferSignature()
 {
 	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::GBufferPass::COUNT] = {};
@@ -2540,7 +1986,7 @@ bool App::CreateGBufferSignature()
 	//SRV descriptors
 	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = m_BindlessDescRanges;
+	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
 	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = s_kuiNumStandardDescriptorRanges;
 
 	//Scene per frame CB
@@ -2557,9 +2003,9 @@ bool App::CreateGBufferSignature()
 	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].Descriptor.ShaderRegister = 1;
 	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
-	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
+	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
 
-	return CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pGBufferRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pGBufferRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 }
 
 bool App::CreateLightSignature()
@@ -2569,7 +2015,7 @@ bool App::CreateLightSignature()
 	//SRV descriptors
 	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = m_BindlessDescRanges;
+	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
 	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = s_kuiNumStandardDescriptorRanges;
 
 	//Scene per frame CB
@@ -2586,48 +2032,9 @@ bool App::CreateLightSignature()
 	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.ShaderRegister = 1;
 	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
-	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = GetStaticSamplers();
+	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
 
-	return CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pLightRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
-}
-
-bool App::CreateRootSignature(D3D12_ROOT_PARAMETER1* rootParams, int iNumRootParams, const CD3DX12_STATIC_SAMPLER_DESC* staticSamplers, int iNumStaticSamplers, ID3D12RootSignature** ppRootSignature, D3D12_ROOT_SIGNATURE_FLAGS flags)
-{
-	D3D12_ROOT_SIGNATURE_DESC1 rootSignatureDesc = {};
-	rootSignatureDesc.NumParameters = iNumRootParams;
-	rootSignatureDesc.pParameters = rootParams;
-	rootSignatureDesc.NumStaticSamplers = iNumStaticSamplers;
-	rootSignatureDesc.pStaticSamplers = staticSamplers;
-	rootSignatureDesc.Flags = flags;
-
-	D3D12_VERSIONED_ROOT_SIGNATURE_DESC versionedDesc = { };
-	versionedDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
-	versionedDesc.Desc_1_1 = rootSignatureDesc;
-
-	ComPtr<ID3DBlob> pSignature;
-	ComPtr<ID3DBlob> pError;
-
-	HRESULT hr = D3D12SerializeVersionedRootSignature(&versionedDesc, pSignature.GetAddressOf(), pError.GetAddressOf());
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to create serialize root signature!");
-
-		OutputDebugStringA((char*)pError->GetBufferPointer());
-
-		return false;
-	}
-
-	hr = m_pDevice->CreateRootSignature(1, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(ppRootSignature));
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to create root signature!");
-
-		return false;
-	}
-
-	return true;
+	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pLightRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 }
 
 void App::PopulateDescriptorHeaps()
@@ -2757,7 +2164,7 @@ bool App::CreateDescriptorHeaps()
 	m_pSRVHeap = new DescriptorHeap();
 
 	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer, 1 extra per in flight frame for depth buffer, 8 for Global illumination
-	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 1 + (s_kuiSwapChainBufferCount * 2) + 1 + (4 * s_kuiSwapChainBufferCount) + 1 + s_kuiSwapChainBufferCount + 8) == false)
+	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 30) == false)
 	{
 		return false;
 	}

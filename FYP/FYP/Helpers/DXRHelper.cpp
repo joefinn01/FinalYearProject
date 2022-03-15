@@ -1,5 +1,6 @@
 #include "DXRHelper.h"
 #include "Helpers/DebugHelper.h"
+#include "Apps/App.h"
 
 #include <dxcapi.h>
 #include <fstream>
@@ -260,4 +261,120 @@ bool DXRHelper::CreateUAVBuffer(ID3D12Device* pDevice, UINT64 uiBufferSize, ID3D
 	}
 
 	return true;
+}
+
+bool DXRHelper::CreateRootSignature(D3D12_ROOT_PARAMETER1* rootParams, int iNumRootParams, const CD3DX12_STATIC_SAMPLER_DESC* staticSamplers, int iNumStaticSamplers, ID3D12RootSignature** ppRootSignature, D3D12_ROOT_SIGNATURE_FLAGS flags)
+{
+	D3D12_ROOT_SIGNATURE_DESC1 rootSignatureDesc = {};
+	rootSignatureDesc.NumParameters = iNumRootParams;
+	rootSignatureDesc.pParameters = rootParams;
+	rootSignatureDesc.NumStaticSamplers = iNumStaticSamplers;
+	rootSignatureDesc.pStaticSamplers = staticSamplers;
+	rootSignatureDesc.Flags = flags;
+
+	D3D12_VERSIONED_ROOT_SIGNATURE_DESC versionedDesc = { };
+	versionedDesc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+	versionedDesc.Desc_1_1 = rootSignatureDesc;
+
+	Microsoft::WRL::ComPtr<ID3DBlob> pSignature;
+	Microsoft::WRL::ComPtr<ID3DBlob> pError;
+
+	HRESULT hr = D3D12SerializeVersionedRootSignature(&versionedDesc, pSignature.GetAddressOf(), pError.GetAddressOf());
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create serialize root signature!");
+
+		OutputDebugStringA((char*)pError->GetBufferPointer());
+
+		return false;
+	}
+
+	hr = App::GetApp()->GetDevice()->CreateRootSignature(1, pSignature->GetBufferPointer(), pSignature->GetBufferSize(), IID_PPV_ARGS(ppRootSignature));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create root signature!");
+
+		return false;
+	}
+
+	return true;
+}
+
+std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> DXRHelper::GetStaticSamplers()
+{
+	const CD3DX12_STATIC_SAMPLER_DESC pointWrap(
+		0, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC pointClamp(
+		1, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_POINT, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearWrap(
+		2, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC linearClamp(
+		3, // shaderRegister
+		D3D12_FILTER_MIN_MAG_MIP_LINEAR, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP); // addressW
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicWrap(
+		4, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_WRAP,  // addressW
+		0.0f,                             // mipLODBias
+		8);                               // maxAnisotropy
+
+	const CD3DX12_STATIC_SAMPLER_DESC anisotropicClamp(
+		5, // shaderRegister
+		D3D12_FILTER_ANISOTROPIC, // filter
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressU
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressV
+		D3D12_TEXTURE_ADDRESS_MODE_CLAMP,  // addressW
+		0.0f,                              // mipLODBias
+		8);                                // maxAnisotropy
+
+	return {
+		pointWrap, pointClamp,
+		linearWrap, linearClamp,
+		anisotropicWrap, anisotropicClamp };
+}
+
+D3D12_DESCRIPTOR_RANGE1* DXRHelper::GetDescriptorRanges()
+{
+	D3D12_DESCRIPTOR_RANGE1* ranges = new D3D12_DESCRIPTOR_RANGE1[App::GetApp()->GetNumStandardDescriptorRanges()];
+
+	UINT32 userIndex = App::GetApp()->GetNumStandardDescriptorRanges() - App::GetApp()->GetNumUserDescriptorRanges();
+	for (UINT32 i = 0; i < App::GetApp()->GetNumStandardDescriptorRanges(); ++i)
+	{
+		ranges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		ranges[i].NumDescriptors = UINT_MAX;
+		ranges[i].BaseShaderRegister = 0;
+		ranges[i].RegisterSpace = i;
+		ranges[i].OffsetInDescriptorsFromTableStart = 0;
+		ranges[i].Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+
+		if (i >= userIndex)
+		{
+			ranges[i].RegisterSpace = (i - userIndex) + 100;
+		}
+	}
+
+	return ranges;
 }

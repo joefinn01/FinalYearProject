@@ -54,29 +54,6 @@ struct FrameResources
 	Descriptor* m_pDepthStencilBufferView;
 };
 
-namespace RaytracingPass
-{
-	namespace GlobalRootSignatureParams
-	{
-		enum Value
-		{
-			OUTPUT = 0,
-			ACCELERATION_STRUCTURE,
-			STANDARD_DESCRIPTORS,
-			PER_FRAME_SCENE_CB,
-			COUNT
-		};
-	}
-
-	namespace LocalRootSignatureParams {
-		enum Value
-		{
-			INDEX = 0,
-			COUNT
-		};
-	}
-}
-
 namespace DeferredPass
 {
 	namespace GBufferPass
@@ -139,8 +116,6 @@ public:
 
 	virtual void Draw();
 
-	void DrawRaytracedPass();
-
 	void DrawDeferredPass();
 	void DrawGBufferPass();
 	void DrawLightPass();
@@ -155,12 +130,17 @@ public:
 	void Set4xMSAAState(bool bState);
 
 	ID3D12GraphicsCommandList4* GetGraphicsCommandList();
-	ID3D12Device* GetDevice();
+	ID3D12Device5* GetDevice();
 
 	static App* GetApp();
 
+	const UINT GetNumStandardDescriptorRanges() const;
+	const UINT GetNumUserDescriptorRanges() const;
+
 	void ExecuteCommandList();
 	void ResetCommandList();
+
+	UINT GetFrameIndex() const;
 
 protected:
 	bool InitWindow();
@@ -169,8 +149,6 @@ protected:
 	void FlushCommandQueue();
 	
 	bool CreateDescriptorHeaps();
-	
-	bool CreateStateObject();
 
 	bool CreatePSOs();
 	bool CreateGBufferPSO();
@@ -186,27 +164,14 @@ protected:
 
 	void CreateGeometry();
 
-	bool CreateAccelerationStructures();
-	bool CreateTLAS(bool bUpdate);
-
-	bool CreateShaderTables();
-	bool CreateRayGenShaderTable();
-	bool CreateMissShaderTable();
-	bool CreateHitGroupShaderTable();
-
 	bool CreateOutputBuffers();
 
 	void CreateCBs();
 
 	bool CreateSignatures();
 
-	bool CreateLocalSignature();
-	bool CreateGlobalSignature();
-
 	bool CreateGBufferSignature();
 	bool CreateLightSignature();
-
-	bool CreateRootSignature(D3D12_ROOT_PARAMETER1* rootParams, int iNumRootParams, const CD3DX12_STATIC_SAMPLER_DESC* staticSamplers, int iNumStaticSamplers, ID3D12RootSignature** ppRootSignature, D3D12_ROOT_SIGNATURE_FLAGS flags = D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	void PopulateDescriptorHeaps();
 	void PopulatePrimitivePerInstanceCB();
@@ -234,8 +199,6 @@ protected:
 	void LogAdapters();
 	void LogAdapterOutputs(IDXGIAdapter* pAdapter, bool bSaveSettings);
 	void LogOutputInfo(IDXGIOutput* pOutput, DXGI_FORMAT format, bool bSaveSettings);
-
-	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
 	ID3D12Resource* GetBackBuffer() const;
 	ID3D12Resource* GetBackBuffer(int iIndex) const;
@@ -290,8 +253,6 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Device5> m_pDevice = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList4> m_pGraphicsCommandList = nullptr;
 
-	AccelerationBuffers m_TopLevelBuffer;
-
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
 
@@ -311,7 +272,7 @@ protected:
 	UINT64 m_uiFenceValue = 0;
 
 	static const UINT32 s_kuiNumUserDescriptorRanges = 16;
-	static const UINT32 s_kuiNumStandardDescriptorRanges = 3 + s_kuiNumUserDescriptorRanges;
+	static const UINT32 s_kuiNumStandardDescriptorRanges = 4 + s_kuiNumUserDescriptorRanges;
 
 	Microsoft::WRL::ComPtr<ID3D12CommandQueue> m_pCommandQueue = nullptr;
 
@@ -325,14 +286,6 @@ protected:
 	DescriptorHeap* m_pRTVHeap = nullptr;
 	DescriptorHeap* m_pDSVHeap = nullptr;
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pHitGroupTable;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_pRayGenTable;
-
-	UINT m_uiMissRecordSize;
-	UINT m_uiHitGroupRecordSize;
-	UINT m_uiRayGenRecordSize;
-
 	UploadBuffer<ScenePerFrameCB>* m_pScenePerFrameCBUpload = nullptr;
 	UploadBuffer<PrimitiveInstanceCB>* m_pPrimitiveInstanceCBUpload = nullptr;
 
@@ -342,33 +295,6 @@ protected:
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
 
 	UINT m_uiNumLights = 0;
-
-	//Raytracing shader names
-	LPCWSTR m_kwsRayGenName = L"RayGen";
-
-	LPCWSTR m_kwsMissName = L"Miss";
-
-	LPCWSTR m_kwsClosestHitEntrypoint = L"ClosestHit";
-
-	LPCWSTR m_ClosestHitNames[(int)ShaderVersions::COUNT] =
-	{
-		L"ClosestHit",
-		L"ClosestHitNoMetallicRoughness",
-		L"ClosestHitNormal",
-		L"ClosestHitOcclusion",
-		L"ClosestHitNormalOcclusion",
-		L"ClosestHitNormalOcclusionEmission",
-	};
-
-	LPCWSTR m_HitGroupNames[(int)ShaderVersions::COUNT] =
-	{
-		L"HitGroup",
-		L"HitGroupNoMetallicRoughness",
-		L"HitGroupNormal",
-		L"HitGroupOcclusion",
-		L"HitGroupNormalOcclusion",
-		L"HitGroupNormalOcclusionEmission",
-	};
 
 	//Light pass shader names
 	LPCWSTR m_wsLightVertexName = L"LightVertex";
@@ -415,8 +341,6 @@ protected:
 		{0.5f, 0.5f, 1, 0},
 	};
 
-	D3D12_DESCRIPTOR_RANGE1 m_BindlessDescRanges[s_kuiNumStandardDescriptorRanges] = {};
-
 	float m_fCameraNearDepth = 0.1f;
 	float m_fCameraFarDepth = 1000.0f;
 
@@ -429,8 +353,6 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;
 
 	GIVolume* m_pGIVolume = nullptr;
-
-	bool m_bRaytrace = false;
 
 #if _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> m_pDebug = nullptr;

@@ -1,28 +1,63 @@
-#include "RaytracingCommons.hlsli"
-
-
+#include "ProbeHelper.hlsl"
+#include "RaytracedLightingHelper.hlsl"
 
 [shader("raygeneration")]
 void RayGen()
 {
-    float3 rayDirectionW;
-    float3 originW;
+    uint2 dispatchIndex = DispatchRaysIndex().xy;
     
-    GenerateCameraRay(DispatchRaysIndex().xy, originW, rayDirectionW);
-
+    int rayIndex = dispatchIndex.x;
+    int probeIndex = dispatchIndex.y;
+    
+    int3 probeCoords = GetProbeCoords(probeIndex);
+    
+    float3 probeCoordsW = GetProbeCoordsWorld(probeCoords);
+    
+    float3 directionW = GetProbeRayDirection(rayIndex);
+    
+    uint2 texCoords = uint2(rayIndex, probeIndex);
+    
     // Trace the ray.
     // Set the ray's extents.
     RayDesc ray;
-    ray.Origin = originW;
-    ray.Direction = rayDirectionW;
-    // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
-    // TMin should be kept small to prevent missing geometry at close contact areas.
+    ray.Origin = probeCoordsW;
+    ray.Direction = directionW;
     ray.TMin = 0.001;
-    ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0) };
-    //TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
-    TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
+    ray.TMax = g_RaytracePerFrame.MaxRayDistance;
+    
+    PackedPayload packedPayload = (PackedPayload)0;
+    
+    TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, packedPayload);
 
-    // Write the raytraced color to the output texture.
-    RenderTarget[DispatchRaysIndex().xy] = payload.color;
+    if (packedPayload.HitDistance < 0.0f)   //If missed
+    {
+        StoreRayMiss(texCoords);
+        
+        return;
+    }
+    
+    Payload payload = UnpackPayload(packedPayload);
+    
+    if (payload.HitType == HIT_TYPE_TRIANGLE_BACK_FACE) //If hit backface
+    {
+        StoreRayBackfaceHit(texCoords, packedPayload.HitDistance);
+        return;
+    }
+    
+    float3 diffuseLight = CalculateDirectDiffuseLight(payload);
+    float3 surfaceBias = GetSurfaceBias(payload.NormalW, directionW);
+    float blendWeight = GetBlendWeight(payload.PosW);
+    
+    float3 irradiance = float3(0, 0, 0);
+    
+    if(blendWeight > 0.0f)
+    {
+        irradiance = GetIrradiance(payload.PosW, surfaceBias, payload.NormalW);
+        
+        irradiance *= blendWeight;
+    }
+    
+    float3 radiance = diffuseLight + ((min(payload.Albedo, float3(0.9f, 0.9f, 0.9f)) * irradiance) / PI);
+    
+    StoreRayFrontfaceHit(texCoords, radiance, payload.HitDistance);
 }

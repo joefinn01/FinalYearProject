@@ -6,6 +6,8 @@ UAVDescriptor::UAVDescriptor(UINT uiDescriptorIndex, D3D12_CPU_DESCRIPTOR_HANDLE
 	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 	uavDesc.ViewDimension = viewDimension;
 	uavDesc.Format = format;
+	uavDesc.Texture2D.MipSlice = 0;
+	uavDesc.Texture2D.PlaneSlice = 0;
 
 	App::GetApp()->GetDevice()->CreateUnorderedAccessView(pResource, nullptr, &uavDesc, handle);
 }
