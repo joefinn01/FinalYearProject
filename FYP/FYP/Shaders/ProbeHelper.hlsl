@@ -7,7 +7,7 @@ uint FloatToUint(float val, float scale)
 
 uint Float3ToUint(float3 input)
 {
-    return (FloatToUint(input.r, 1023.f)) | (FloatToUint(input.g, 1023.f) << 10) | (FloatToUint(input.b, 1023.f) << 20);
+    return FloatToUint(input.r, 1023.0f) | (FloatToUint(input.g, 1023.0f) << 10) | (FloatToUint(input.b, 1023.0f) << 20);
 }
 
 int3 GetProbeCoords(int probeIndex)
@@ -107,7 +107,7 @@ void StoreRayMiss(uint2 texCoords)
     }
     else
     {
-        RayData[texCoords] = float4(asfloat(Float3ToUint(g_RaytracePerFrame.MissRadiance)), 1e27f, 0, 0);
+        RayData[texCoords] = float4(Float3ToUint(g_RaytracePerFrame.MissRadiance), 1e27f, 0, 0);
     }
 }
 
@@ -137,7 +137,7 @@ void StoreRayFrontfaceHit(uint2 texCoords, float3 radiance, float hitDistance)
             radiance.rgb = float3(0.f, 0.f, 0.f);
         }
 
-        RayData[texCoords] = float4(asfloat(Float3ToUint(radiance)), hitDistance, 0.f, 0.f);
+        RayData[texCoords] = float4(Float3ToUint(radiance), hitDistance, 0.f, 0.f);
     }
 }
 
