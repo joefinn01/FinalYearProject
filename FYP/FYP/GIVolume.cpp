@@ -58,34 +58,69 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 
 void GIVolume::ShowUI()
 {
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
-	if (ImGuiHelper::DragFloat3("Position", m_Position) == true)
+	if (ImGui::CollapsingHeader("GI Settings"))
 	{
-		UpdateProbePositions();
-	}
+		if (ImGuiHelper::DragFloat3("Position", m_Position) == true)
+		{
+			UpdateProbePositions();
+		}
 
-	ImGui::Spacing();
+		ImGui::Spacing();
 
-	if (ImGuiHelper::DragFloat3("Probe Spacing", m_ProbeSpacing) == true)
-	{
-		UpdateProbePositions();
-	}
+		if (ImGuiHelper::DragFloat3("Probe Spacing", m_ProbeSpacing) == true)
+		{
+			UpdateProbePositions();
+		}
 
-	ImGui::Spacing();
+		ImGui::Spacing();
 
-	if (ImGuiHelper::DragFloat("Probe Scale", m_ProbeScale) == true)
-	{
-		UpdateProbeScales();
-	}
+		if (ImGuiHelper::DragFloat("Probe Scale", m_ProbeScale) == true)
+		{
+			UpdateProbeScales();
+		}
 
-	ImGui::Spacing();
+		ImGui::Spacing();
 
-	if (ImGuiHelper::Checkbox("Show Probes", m_bShowProbes) == true)
-	{
-		ToggleProbeVisibility();
+		ImGuiHelper::DragFloat3("Miss Radiance", m_MissRadiance);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Max Ray Distance", m_fMaxRayDistance, 150.0f, 0.1f, 0, 10000);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Distance Exponent", m_fDistancePower, 150.0f, 0.1f, 0, 1000);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("View Bias", m_fViewBias, 150.0f, 0.1f, 0, 10);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Normal Bias", m_fNormalBias, 150.0f, 0.1f, 0, 10);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Hysteresis", m_fHysteresis, 150.0f, 0.1f, 0, 1);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Irradiance Gamma", m_fIrradianceGammaEncoding, 150.0f, 0.1f, 0, 100);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Irradiance Threshold", m_fIrradianceThreshold, 150.0f, 0.1f, 0, 100);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat("Brightness Threshold", m_fBrightnessThreshold, 150.0f, 0.1f, 0, 100);
+
+		ImGui::Spacing();
+
+		if (ImGuiHelper::Checkbox("Show Probes", m_bShowProbes, 150.0f) == true)
+		{
+			ToggleProbeVisibility();
+		}
 	}
 }
 
@@ -1057,7 +1092,7 @@ void GIVolume::UpdateConstantBuffers()
 	raytracePerFrame.IrradianceIndex = m_pIrradianceAtlas->GetSRVDesc()->GetDescriptorIndex();
 	raytracePerFrame.IrradianceThreshold = m_fIrradianceThreshold;
 	raytracePerFrame.MaxRayDistance = m_fMaxRayDistance;
-	raytracePerFrame.MissRadiance = DirectX::XMFLOAT3(0, 0, 0);
+	raytracePerFrame.MissRadiance = m_MissRadiance;
 	raytracePerFrame.NormalBias = m_fNormalBias;
 	raytracePerFrame.NumDistanceTexels = m_iDistanceTexelsPerProbe;
 	raytracePerFrame.NumIrradianceTexels = m_iIrradianceTexelsPerProbe;

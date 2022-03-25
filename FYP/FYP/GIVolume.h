@@ -253,6 +253,7 @@ private:
 	int m_iIrradianceFormat = 1;
 	float m_fIrradianceGammaEncoding = 5.0f;
 	float m_fIrradianceThreshold = 0.2f;
+	DirectX::XMFLOAT3 m_MissRadiance = DirectX::XMFLOAT3(0, 0, 0);
 
 	DirectX::XMFLOAT4 m_RayRotation = DirectX::XMFLOAT4(0, 0, 0, 1);
 

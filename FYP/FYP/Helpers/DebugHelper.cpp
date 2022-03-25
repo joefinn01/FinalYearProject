@@ -100,34 +100,31 @@ std::unordered_map<std::string, double>* DebugHelper::GetFrameTimes()
 
 void DebugHelper::ShowUI()
 {
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
-	ImGui::TextUnformatted("CPU Times (ms)");
-
-	ImGui::Spacing();
-
-	for (std::unordered_map<std::string, double>::iterator it = s_TimerTimes.begin(); it != s_TimerTimes.end(); ++it)
+	if (ImGui::CollapsingHeader("Profile Information"))
 	{
-		ImGuiHelper::Text(it->first, "%f", 150.0f, it->second * 1000.0f);
+		if (ImGui::TreeNode("CPU Times (ms)"))
+		{
+			for (std::unordered_map<std::string, double>::iterator it = s_TimerTimes.begin(); it != s_TimerTimes.end(); ++it)
+			{
+				ImGuiHelper::Text(it->first, "%f", 150.0f, it->second * 1000.0f);
 
-		ImGui::Spacing();
-	}
+				ImGui::Spacing();
+			}
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
+			ImGui::TreePop();
+		}
 
-	ImGui::TextUnformatted("GPU Times (ms)");	
+		if (ImGui::TreeNode("GPU Times (ms)"))
+		{
+			for (int i = 0; i < (int)GpuStats::COUNT; ++i)
+			{
+				ImGuiHelper::Text(s_sGpuStatNames[i], "%f", 150.0f, s_GpuStatTimes[i]);
 
-	ImGui::Spacing();
+				ImGui::Spacing();
+			}
 
-	for (int i = 0; i < (int)GpuStats::COUNT; ++i)
-	{
-		ImGuiHelper::Text(s_sGpuStatNames[i], "%f", 150.0f, s_GpuStatTimes[i]);
-
-		ImGui::Spacing();
+			ImGui::TreePop();
+		}
 	}
 }
 
