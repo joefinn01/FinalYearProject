@@ -602,31 +602,31 @@ void App::DrawGBufferPass()
 			switch (pRenderInfo->m_pPrimitive->m_Attributes)
 			{
 			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS | PrimitiveAttributes::EMISSIVE:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION].Get());
 				break;
 
 			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL_OCCLUSION].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION].Get());
 				break;
 
 			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NORMAL].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL].Get());
 				break;
 
 			case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::OCCLUSION].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::OCCLUSION].Get());
 				break;
 
 			case PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::METALLIC_ROUGHNESS].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::METALLIC_ROUGHNESS].Get());
 				break;
 
 			case PrimitiveAttributes::ALBEDO:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::ALBEDO].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::ALBEDO].Get());
 				break;
 
 			default:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NOTHING].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NOTHING].Get());
 				break;
 			}
 
@@ -1187,7 +1187,7 @@ bool App::CreateGBufferPSO()
 		psoDesc.RTVFormats[i] = m_GBufferFormats[i];
 	}
 
-	for (int i = 0; i < (int)ShaderVersions::COUNT; ++i)
+	for (int i = 0; i < (int)DeferredPass::GBufferPass::ShaderVersions::COUNT; ++i)
 	{
 		psoDesc.PS.BytecodeLength = m_Shaders[m_GBufferPixelNames[i]]->GetBufferSize();
 		psoDesc.PS.pShaderBytecode = m_Shaders[m_GBufferPixelNames[i]]->GetBufferPointer();
@@ -1328,13 +1328,13 @@ bool App::CompileShaders()
 	{
 		//G Buffer pass shaders
 		CompileRecord(L"Shaders/GBufferVertex.hlsl", m_wsGBufferVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL], L"ps_6_3", L"main", normal, (int)_countof(normal)),	//Normal
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::METALLIC_ROUGHNESS], L"ps_6_3", L"main", metallicRoughness, (int)_countof(metallicRoughness)),	//No metallic roughness or anything else
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::ALBEDO], L"ps_6_3", L"main", albedo, (int)_countof(albedo)),	//Just albedo
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL], L"ps_6_3", L"main", normal, (int)_countof(normal)),	//Normal
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::METALLIC_ROUGHNESS], L"ps_6_3", L"main", metallicRoughness, (int)_countof(metallicRoughness)),	//No metallic roughness or anything else
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::ALBEDO], L"ps_6_3", L"main", albedo, (int)_countof(albedo)),	//Just albedo
 
 
 		//Light pass shaders

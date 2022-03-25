@@ -65,6 +65,18 @@ namespace DeferredPass
 			PRIMITIVE_INDEX_CB,
 			COUNT
 		};
+
+		enum class ShaderVersions
+		{
+			NOTHING = 0,
+			ALBEDO,
+			METALLIC_ROUGHNESS,
+			NORMAL,
+			OCCLUSION,
+			NORMAL_OCCLUSION,
+			NORMAL_OCCLUSION_EMISSION,
+			COUNT
+		};
 	}
 
 	namespace LightPass
@@ -79,18 +91,6 @@ namespace DeferredPass
 		};
 	}
 }
-
-enum class ShaderVersions
-{
-	NOTHING = 0,
-	ALBEDO,
-	METALLIC_ROUGHNESS,
-	NORMAL,
-	OCCLUSION,
-	NORMAL_OCCLUSION,
-	NORMAL_OCCLUSION_EMISSION,
-	COUNT
-};
 
 struct RenderInfo
 {
@@ -304,7 +304,7 @@ protected:
 
 	//G Buffer pass shader names
 	LPCWSTR m_wsGBufferVertexName = L"GBufferVertex";
-	LPCWSTR m_GBufferPixelNames[(int)ShaderVersions::COUNT] =
+	LPCWSTR m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::COUNT] =
 	{
 		L"GBufferPixel",
 		L"GBufferPixelAlbedo",
@@ -316,7 +316,7 @@ protected:
 	};
 
 
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSOs[(int)ShaderVersions::COUNT] = { };
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::COUNT] = { };
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSO = nullptr;
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> m_ScreenQuadInputDesc;
@@ -356,6 +356,9 @@ protected:
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;
 
 	GIVolume* m_pGIVolume = nullptr;
+
+	bool m_bShowIndirect = false;
+	bool m_bUseGI = true;
 
 #if _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> m_pDebug = nullptr;
