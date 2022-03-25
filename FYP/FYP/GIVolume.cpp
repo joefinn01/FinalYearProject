@@ -19,6 +19,7 @@
 #endif
 
 #include <math.h>
+#include <time.h>
 
 Tag tag = L"GIVolume";
 
@@ -32,7 +33,7 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 	m_bProbeRelocation = kVolumeDesc.ProbeRelocation;
 	m_bProbeTracking = kVolumeDesc.ProbeTracking;
 
-	m_rng.seed(0);
+	m_rng.seed(time(0));
 
 	CreateProbeGameObjects(pCommandList);
 
