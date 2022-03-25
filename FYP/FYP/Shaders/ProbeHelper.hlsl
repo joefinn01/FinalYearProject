@@ -34,9 +34,14 @@ int GetProbeIndex(int2 texCoords, int numTexels, int3 probeCounts)
 
 }
 
-float3 GetProbeCoordsWorld(int3 probeCoords, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
+int GetOffsettedProbeIndex(int3 probeCoords, int3 probeCounts, int3 probeOffsets)
 {
-    return volumePosition - ((probeCounts - 1) * probeSpacing * 0.5f) + (probeCoords * probeSpacing);
+    return GetProbeIndex((probeCoords + probeOffsets + probeCounts) % probeCounts, probeCounts);
+}
+
+float3 GetProbeCoordsWorld(int3 probeCoords, float3 volumePosition, int3 probeOffsets, float3 probeSpacing, int3 probeCounts)
+{
+    return volumePosition + (probeOffsets * probeSpacing) - ((probeCounts - 1) * probeSpacing * 0.5f) + (probeCoords * probeSpacing);
 }
 
 float3 GetProbeRayDirection(int rayIndex, int raysPerProbe, float4 rayRotation)
@@ -103,18 +108,18 @@ float3 GetSurfaceBias(float3 normal, float3 direction, float normalBias, float v
     return (normal * normalBias) + (-direction * viewBias);
 }
 
-int3 GetClosestProbeCoords(float3 posW, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
+int3 GetClosestProbeCoords(float3 posW, float3 volumePosition, int3 probeOffsets, float3 probeSpacing, int3 probeCounts)
 {
-    float3 relativePos = posW - (volumePosition - (probeSpacing * (probeCounts - 1)) * 0.5f);
+    float3 relativePos = posW - (volumePosition + (probeOffsets * probeSpacing) - (probeSpacing * (probeCounts - 1)) * 0.5f);
 
     int3 probeCoords = int3(relativePos / probeSpacing);
 
     return clamp(probeCoords, int3(0, 0, 0), probeCounts - 1);
 }
 
-float GetBlendWeight(float3 posW, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
+float GetBlendWeight(float3 posW, float3 volumePosition, int3 probeOffsets, float3 probeSpacing, int3 probeCounts)
 {
-    float3 deltaPosW = abs(posW - volumePosition) - (probeSpacing * (probeCounts - 1)) * 0.5f;
+    float3 deltaPosW = abs(posW - (volumePosition + (probeOffsets * probeSpacing))) - (probeSpacing * (probeCounts - 1)) * 0.5f;
 
     if (all(deltaPosW < 0.0f))
     {
@@ -173,6 +178,33 @@ float GetRayDistance(uint2 texCoords, int rayDataFormat, Texture2D<float4> rayDa
     {
         return rayData[texCoords].g;
     }
+}
+
+bool ClearScrolledPlane(int2 coords, int3 probeCoords, int planeIndex, int3 probeOffsets, int3 probeCounts, int3 clearPlane, RWTexture2D<float4> dataAtlas)
+{
+    if(clearPlane[planeIndex] == true)
+    {
+        int plane;
+        
+        if(probeOffsets[planeIndex] > 0)
+        {
+            plane = (probeOffsets[planeIndex] % probeCounts[planeIndex]) - 1;
+
+        }
+        else
+        {
+            plane = (probeOffsets[planeIndex] % probeCounts[planeIndex]) + probeCounts[planeIndex];
+        }
+        
+        if (probeCoords[planeIndex] == plane)
+        {
+            dataAtlas[coords] = float4(0.f, 0.f, 0.f, 0.f);
+            
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 #endif

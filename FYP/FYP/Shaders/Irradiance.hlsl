@@ -17,8 +17,8 @@ float4 GetIrradiance(float3 posW, float3 surfaceBias, float3 direction, Raytrace
     Texture2D<float4> distanceAtlas = Tex2DTable[raytracingPerFrameCB.DistanceIndex];
     
     float3 biasedPosW = posW + surfaceBias;
-    int3 closestProbeCoords = GetClosestProbeCoords(biasedPosW, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
-    float3 closestProbeCoordsWorld = GetProbeCoordsWorld(closestProbeCoords, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
+    int3 closestProbeCoords = GetClosestProbeCoords(biasedPosW, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeOffsets, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
+    float3 closestProbeCoordsWorld = GetProbeCoordsWorld(closestProbeCoords, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeOffsets, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
 
     float3 distanceRatio = clamp((biasedPosW - closestProbeCoordsWorld) / raytracingPerFrameCB.ProbeSpacing, float3(0, 0, 0), float3(1, 1, 1));
     
@@ -31,9 +31,9 @@ float4 GetIrradiance(float3 posW, float3 surfaceBias, float3 direction, Raytrace
         //Some bitwise magic to get all the different offsets
         int3 probeOffset = int3(i, i >> 1, i >> 2) & int3(1, 1, 1);
         int3 probeCoords = clamp(closestProbeCoords + probeOffset, int3(0, 0, 0), raytracingPerFrameCB.ProbeCounts - 1);
-        int probeIndex = GetProbeIndex(probeCoords, raytracingPerFrameCB.ProbeCounts);
+        int probeIndex = GetOffsettedProbeIndex(probeCoords, raytracingPerFrameCB.ProbeCounts, raytracingPerFrameCB.ProbeOffsets);
         
-        float3 probeCoordsWorld = GetProbeCoordsWorld(probeCoords, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
+        float3 probeCoordsWorld = GetProbeCoordsWorld(probeCoords, raytracingPerFrameCB.VolumePosition, raytracingPerFrameCB.ProbeOffsets, raytracingPerFrameCB.ProbeSpacing, raytracingPerFrameCB.ProbeCounts);
         
         float3 toProbe = normalize(probeCoordsWorld - posW);
         float3 biasedToProbe = probeCoordsWorld - biasedPosW;

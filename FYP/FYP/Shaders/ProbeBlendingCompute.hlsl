@@ -29,6 +29,25 @@ void main(uint3 DTid : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex)
 
     uint2 atlasCoords = uint2(1, 1) + DTid.xy + (DTid.xy / NUM_TEXELS_PER_PROBE) * 2;
     
+    int3 probeCoords = GetProbeCoords(probeIndex, g_RaytracePerFrame.ProbeCounts);
+    
+    bool clearedPlane = false;
+    
+#if BLEND_RADIANCE
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 0, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, IrradianceData);
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 1, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, IrradianceData);
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 2, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, IrradianceData);
+#else
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 0, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, DistanceData);
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 1, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, DistanceData);
+    clearedPlane |= ClearScrolledPlane(atlasCoords, probeCoords, 2, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ClearPlane, DistanceData);
+#endif
+
+    if(clearedPlane == true)
+    {
+        return;
+    }
+    
     float2 octCoords = GetNormalizedOctahedralCoords(DTid.xy, NUM_TEXELS_PER_PROBE);
     float3 direction = GetOctahedralDirection(octCoords);
     

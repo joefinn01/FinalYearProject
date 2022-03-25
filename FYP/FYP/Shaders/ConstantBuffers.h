@@ -102,6 +102,12 @@ struct RaytracePerFrameCB
 	int DistanceIndex;
 	int IrradianceFormat;
 	int RayDataIndex;
+
+	XMINT3 ProbeOffsets;
+	float pad;
+
+	XMINT3 ClearPlane;
+	float pad2;
 };
 
 #endif // CONSTANT_BUFFERS_H

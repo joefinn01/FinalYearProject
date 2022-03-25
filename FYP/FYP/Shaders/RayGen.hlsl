@@ -13,7 +13,9 @@ void RayGen()
     
     int3 probeCoords = GetProbeCoords(probeIndex, g_RaytracePerFrame.ProbeCounts);
     
-    float3 probeCoordsW = GetProbeCoordsWorld(probeCoords, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
+    float3 probeCoordsW = GetProbeCoordsWorld(probeCoords, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
+    
+    probeIndex = GetOffsettedProbeIndex(probeCoords, g_RaytracePerFrame.ProbeCounts, g_RaytracePerFrame.ProbeOffsets);
     
     float3 directionW = GetProbeRayDirection(rayIndex, g_RaytracePerFrame.RaysPerProbe, g_RaytracePerFrame.RayRotation);
     
@@ -48,7 +50,7 @@ void RayGen()
     
     float3 diffuseLight = CalculateDirectDiffuseLight(payload);
     float3 surfaceBias = GetSurfaceBias(payload.NormalW, directionW, g_RaytracePerFrame.NormalBias, g_RaytracePerFrame.ViewBias);
-    float blendWeight = GetBlendWeight(payload.PosW, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
+    float blendWeight = GetBlendWeight(payload.PosW, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
     
     float4 irradiance = float4(0, 0, 0, -1);
     

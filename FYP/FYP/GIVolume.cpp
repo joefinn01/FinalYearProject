@@ -1104,6 +1104,8 @@ void GIVolume::UpdateConstantBuffers()
 	raytracePerFrame.ViewBias = m_fViewBias;
 	raytracePerFrame.RaysPerProbe = m_iRaysPerProbe;
 	raytracePerFrame.VolumePosition = m_Position;
+	raytracePerFrame.ProbeOffsets = m_ProbeScrolling;
+	raytracePerFrame.ClearPlane = m_ClearPlanes;
 	
 	m_pRaytracedPerFrameUpload->CopyData(0, raytracePerFrame);
 }
