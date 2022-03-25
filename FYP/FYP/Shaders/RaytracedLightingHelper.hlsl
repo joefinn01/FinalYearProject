@@ -1,4 +1,9 @@
+#ifndef RAYTRACED_LIGHTING_HELPER_HLSL
+#define RAYTRACED_LIGHTING_HELPER_HLSL
+
 #include "RaytracingCommons.hlsli"
+#include "Payloads.hlsli"
+#include "Defines.hlsli"
 
 float CheckLightVisibility(Payload payload, float maxDistance, float3 lightVec)
 {
@@ -10,7 +15,7 @@ float CheckLightVisibility(Payload payload, float maxDistance, float3 lightVec)
     
     PackedPayload packedPayload = (PackedPayload) 0;
     
-    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, ~0, 0, 1, 0, ray, packedPayload);
+    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 1, 0, ray, packedPayload);
 
     return packedPayload.HitDistance < 0.0f;
 }
@@ -32,7 +37,6 @@ float3 CalculateDirectDiffuseLight(Payload payload)
         if(visibility <= 0.0f)
         {
             return float3(0, 0, 0);
-
         }
         
         light /= distance;
@@ -45,3 +49,5 @@ float3 CalculateDirectDiffuseLight(Payload payload)
 
     return directLight * brdf;
 }
+
+#endif

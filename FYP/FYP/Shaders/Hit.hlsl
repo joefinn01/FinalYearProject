@@ -22,7 +22,11 @@ Ray GenerateCameraRay(uint2 index, float3 eyePosW, float4x4 InvViewProjection)
 }
 
 [shader("closesthit")]
+#if ALBEDO
+void ClosestHitAlbedo(inout PackedPayload packedPayload, in BuiltInTriangleIntersectionAttributes attr)
+#else
 void ClosestHit(inout PackedPayload packedPayload, in BuiltInTriangleIntersectionAttributes attr)
+#endif
 {
     Payload payload = (Payload) 0;
     payload.HitDistance = RayTCurrent();
@@ -59,7 +63,11 @@ void ClosestHit(inout PackedPayload packedPayload, in BuiltInTriangleIntersectio
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = bary.x * vertices[indices.x].TexCoords + bary.y * vertices[indices.y].TexCoords + bary.z * vertices[indices.z].TexCoords;
     
+#if ALBEDO
     float4 albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamAnisotropicWrap, uv, 0);
+#else
+    float4 albedo = geomInfo.AlbedoColor;
+#endif
     
     payload.Albedo = albedo.rgb;
     payload.Opacity = albedo.w;

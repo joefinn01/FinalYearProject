@@ -18,6 +18,8 @@
 #include <strsafe.h>
 #endif
 
+#include <math.h>
+
 Tag tag = L"GIVolume";
 
 GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* pCommandList, DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
@@ -30,6 +32,8 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 	m_bProbeRelocation = kVolumeDesc.ProbeRelocation;
 	m_bProbeTracking = kVolumeDesc.ProbeTracking;
 
+	m_rng.seed(0);
+
 	CreateProbeGameObjects(pCommandList);
 
 	CreateTextureAtlases(pSRVHeap, pRTVHeap);
@@ -37,6 +41,8 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 	CompileShaders();
 
 	CreateRootSignatures();
+
+	CreatePSOs();
 
 	CreateStateObject();
 
@@ -84,7 +90,9 @@ void GIVolume::ShowUI()
 
 void GIVolume::Update(const Timer& kTimer)
 {
+	UpdateRandomRotation();
 
+	UpdateConstantBuffers();
 }
 
 void GIVolume::Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
@@ -94,36 +102,15 @@ void GIVolume::Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pSc
 		return;
 	}
 
-	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Raytraced Render"));
+	GPU_PROFILE_BEGIN(GpuStats::DRAW_VOLUME, pGraphicsCommandList)
+	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Draw GI Volume"));
 
-	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
-	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
-	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
-	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
-	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
-	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
-	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
-	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
-	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
-	dispatchDesc.Width = m_iRaysPerProbe;
-	dispatchDesc.Height = m_ProbeCounts.x * m_ProbeCounts.y * m_ProbeCounts.z;
-	dispatchDesc.Depth = 1;
-
-	pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
-
-	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
-	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
-
-	pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
-
-	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
-	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
-
-	pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
-
-	pGraphicsCommandList->DispatchRays(&dispatchDesc);
+	PopulateRayData(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
+	BlendProbeAtlases(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
+	DrawIndirect(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
 
 	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::DRAW_VOLUME, pGraphicsCommandList)
 }
 
 const DirectX::XMFLOAT3& GIVolume::GetPosition() const
@@ -149,6 +136,11 @@ const float& GIVolume::GetProbeScale() const
 const DirectX::XMINT3& GIVolume::GetProbeCounts() const
 {
 	return m_ProbeCounts;
+}
+
+UploadBuffer<RaytracePerFrameCB>* GIVolume::GetRaytracePerFrameUpload()
+{
+	return m_pRaytracedPerFrameUpload;
 }
 
 const bool& GIVolume::IsRelocating() const
@@ -453,8 +445,11 @@ bool GIVolume::CreateStateObject()
 
 	AssociateShader(m_kwsMissName, m_kwsMissName, pipelineDesc);
 
-	AssociateShader(m_ClosestHitName, m_ClosestHitName, pipelineDesc);
-	CreateHitGroup(m_ClosestHitName, m_HitGroupName, pipelineDesc);
+	for (int i = 0; i < (int)ClosestHitShaderVariants::COUNT; ++i)
+	{
+		AssociateShader(m_ClosestHitNames[i], m_ClosestHitNames[i], pipelineDesc);
+		CreateHitGroup(m_ClosestHitNames[i], m_HitGroupNames[i], pipelineDesc);
+	}
 
 	//Do shader config stuff
 	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT* pShaderConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
@@ -469,7 +464,10 @@ bool GIVolume::CreateStateObject()
 	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT* pAssociation = pipelineDesc.CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
 	pAssociation->SetSubobjectToAssociate(*pLocalRootSignature);
 
-	pAssociation->AddExport(m_HitGroupName);
+	for (int i = 0; i < (int)ClosestHitShaderVariants::COUNT; ++i)
+	{
+		pAssociation->AddExport(m_HitGroupNames[i]);
+	}
 
 	//Global
 	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
@@ -570,6 +568,63 @@ bool GIVolume::CreateRootSignatures()
 		}
 	}
 
+	{
+		D3D12_DESCRIPTOR_RANGE1 rayDataRange[1] = {};
+		rayDataRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		rayDataRange[0].NumDescriptors = 1;
+		rayDataRange[0].BaseShaderRegister = 0;
+		rayDataRange[0].RegisterSpace = 0;
+		rayDataRange[0].OffsetInDescriptorsFromTableStart = 0;
+
+		D3D12_DESCRIPTOR_RANGE1 textureAtlasRange[1] = {};
+		textureAtlasRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		textureAtlasRange[0].NumDescriptors = 1;
+		textureAtlasRange[0].BaseShaderRegister = 1;
+		textureAtlasRange[0].RegisterSpace = 0;
+		textureAtlasRange[0].OffsetInDescriptorsFromTableStart = 0;
+
+		D3D12_ROOT_PARAMETER1 slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::COUNT] = {};
+
+		//SRV descriptors
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = App::GetApp()->GetNumStandardDescriptorRanges();
+
+		//Ray Data UAV
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA].DescriptorTable.pDescriptorRanges = rayDataRange;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA].DescriptorTable.NumDescriptorRanges = _countof(rayDataRange);
+
+		//Texture atlas UAV
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS].DescriptorTable.pDescriptorRanges = textureAtlasRange;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS].DescriptorTable.NumDescriptorRanges = _countof(textureAtlasRange);
+
+		//Scene per frame CB
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+		//Raytrace per frame CB
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.RegisterSpace = 0;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.ShaderRegister = 1;
+		slotRootParameter[RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+		std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
+
+		if (DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pProbeBlendingRootSignature.GetAddressOf()) == false)
+		{
+			return false;
+		}
+	}
+
 	return true;
 }
 
@@ -633,7 +688,7 @@ bool GIVolume::CreateMissShaderTable()
 
 bool GIVolume::CreateHitGroupShaderTable()
 {
-	void* pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupName);
+	void* pHitGroupIdentifier = nullptr;
 
 	struct HitGroupRootArgs
 	{
@@ -673,6 +728,17 @@ bool GIVolume::CreateHitGroupShaderTable()
 				hitGroupRootArgs.IndexCB.PrimitiveIndex = pNode->m_Primitives[i]->m_iIndex;
 
 				++uiNumPrimitives;
+
+				switch (pNode->m_Primitives[i]->m_Attributes)
+				{
+				case PrimitiveAttributes::ALBEDO:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::ALBEDO]);
+					break;
+
+				default:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NONE]);
+					break;
+				}
 
 				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
 				{
@@ -811,9 +877,134 @@ bool GIVolume::CreateTLAS(bool bUpdate)
 	return true;
 }
 
+bool GIVolume::CreatePSOs()
+{
+	ID3D12Device* pDevice = App::GetApp()->GetDevice();
+	//====================================================
+	//Irradiance atlas blending
+	//====================================================
+
+	//General blend
+	D3D12_COMPUTE_PIPELINE_STATE_DESC computePsoDesc;
+	computePsoDesc.pRootSignature = m_pProbeBlendingRootSignature.Get();
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_IrradianceProbeBlendingName]->GetBufferPointer(), m_Shaders[m_IrradianceProbeBlendingName]->GetBufferSize());
+	computePsoDesc.CachedPSO = { nullptr, 0 };
+	computePsoDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+	computePsoDesc.NodeMask = 0;
+
+	HRESULT hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pIrradianceBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the irradiance blend pipeline state objects!");
+
+		return false;
+	}
+
+	//Row blend
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_IrradianceRowProbeBlendingName]->GetBufferPointer(), m_Shaders[m_IrradianceRowProbeBlendingName]->GetBufferSize());
+
+	hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pIrradianceRowBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the irradiance row blend pipeline state objects!");
+
+		return false;
+	}
+
+	//Column blend
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_IrradianceColumnProbeBlendingName]->GetBufferPointer(), m_Shaders[m_IrradianceColumnProbeBlendingName]->GetBufferSize());
+
+	hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pIrradianceColumnBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the irradiance column blend pipeline state objects!");
+
+		return false;
+	}
+
+	//====================================================
+	//Distance atlas blending
+	//====================================================
+
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_DistanceProbeBlendingName]->GetBufferPointer(), m_Shaders[m_DistanceProbeBlendingName]->GetBufferSize());
+
+	hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pDistanceBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the Distance blend pipeline state objects!");
+
+		return false;
+	}
+
+	//Row blend
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_DistanceRowProbeBlendingName]->GetBufferPointer(), m_Shaders[m_DistanceRowProbeBlendingName]->GetBufferSize());
+
+	hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pDistanceRowBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the Distance row blend pipeline state objects!");
+
+		return false;
+	}
+
+	//Column blend
+	computePsoDesc.CS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_DistanceColumnProbeBlendingName]->GetBufferPointer(), m_Shaders[m_DistanceColumnProbeBlendingName]->GetBufferSize());
+
+	hr = pDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(m_pDistanceColumnBlendPSO.GetAddressOf()));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the Distance column blend pipeline state objects!");
+
+		return false;
+	}
+
+	return true;
+}
+
 bool GIVolume::CompileShaders()
 {
 	Microsoft::WRL::ComPtr<IDxcBlob> pBlob;
+
+	std::wstring wsRaysPerProbe = std::wstring(L"BLEND_RAYS_PER_PROBE=") + std::to_wstring(m_iRaysPerProbe);
+	std::wstring wsIrradianceTexelsPerProbe = std::wstring(L"NUM_TEXELS_PER_PROBE=") + std::to_wstring(m_iIrradianceTexelsPerProbe);
+	std::wstring wsDistanceTexelsPerProbe = std::wstring(L"NUM_TEXELS_PER_PROBE=") + std::to_wstring(m_iDistanceTexelsPerProbe);
+
+	LPCWSTR irradianceProbeBlendingDefines[] =
+	{
+		L"BLEND_RADIANCE=1",
+		wsRaysPerProbe.c_str(),
+		wsIrradianceTexelsPerProbe.c_str()
+	};
+
+	LPCWSTR distanceProbeBlendingDefines[] =
+	{
+		L"BLEND_RADIANCE=0",
+		wsRaysPerProbe.c_str(),
+		wsDistanceTexelsPerProbe.c_str()
+	};
+
+	LPCWSTR irradianceBorderProbeBlendingDefines[] =
+	{
+		L"BLEND_RADIANCE=1",
+		wsIrradianceTexelsPerProbe.c_str()
+	};
+
+	LPCWSTR distanceBorderProbeBlendingDefines[] =
+	{
+		L"BLEND_RADIANCE=0",
+		wsDistanceTexelsPerProbe.c_str()
+	};
+
+	LPCWSTR albedo[] =
+	{
+		L"ALBEDO=1",
+	};
 
 	//Create array of shaders to compile
 	CompileRecord records[] =
@@ -821,7 +1012,16 @@ bool GIVolume::CompileShaders()
 		//Raytracing pass shaders
 		CompileRecord(L"Shaders/RayGen.hlsl", m_kwsRayGenName, L"lib_6_3"),
 		CompileRecord(L"Shaders/Miss.hlsl", m_kwsMissName, L"lib_6_3"),
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitName, L"lib_6_3"),	//Nothing
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NONE], L"lib_6_3"),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO], L"lib_6_3", L"", albedo, _countof(albedo)),
+
+		CompileRecord(L"Shaders/ProbeBlendingCompute.hlsl", m_IrradianceProbeBlendingName, L"cs_6_3", L"", irradianceProbeBlendingDefines, _countof(irradianceProbeBlendingDefines)),
+		CompileRecord(L"Shaders/ProbeBorderBlendingCompute.hlsl", m_IrradianceRowProbeBlendingName, L"cs_6_3", L"RowBlend", irradianceBorderProbeBlendingDefines, _countof(irradianceBorderProbeBlendingDefines)),
+		CompileRecord(L"Shaders/ProbeBorderBlendingCompute.hlsl", m_IrradianceColumnProbeBlendingName, L"cs_6_3", L"ColumnBlend", irradianceBorderProbeBlendingDefines, _countof(irradianceBorderProbeBlendingDefines)),
+
+		CompileRecord(L"Shaders/ProbeBlendingCompute.hlsl", m_DistanceProbeBlendingName, L"cs_6_3", L"", distanceProbeBlendingDefines, _countof(distanceProbeBlendingDefines)),
+		CompileRecord(L"Shaders/ProbeBorderBlendingCompute.hlsl", m_DistanceRowProbeBlendingName, L"cs_6_3", L"RowBlend", distanceBorderProbeBlendingDefines, _countof(distanceBorderProbeBlendingDefines)),
+		CompileRecord(L"Shaders/ProbeBorderBlendingCompute.hlsl", m_DistanceColumnProbeBlendingName, L"cs_6_3", L"ColumnBlend", distanceBorderProbeBlendingDefines, _countof(distanceBorderProbeBlendingDefines)),
 	};
 
 	for (int i = 0; i < _countof(records); ++i)
@@ -847,17 +1047,71 @@ void GIVolume::CreateConstantBuffers()
 void GIVolume::UpdateConstantBuffers()
 {
 	RaytracePerFrameCB raytracePerFrame;
+	raytracePerFrame.BrightnessThreshold = m_fBrightnessThreshold;
+	raytracePerFrame.DistanceIndex = m_pDistanceAtlas->GetSRVDesc()->GetDescriptorIndex();
+	raytracePerFrame.DistancePower = m_fDistancePower;
+	raytracePerFrame.Hysteresis = m_fHysteresis;
+	raytracePerFrame.IrradianceFormat = m_iIrradianceFormat;
+	raytracePerFrame.IrradianceGammaEncoding = m_fIrradianceGammaEncoding;
+	raytracePerFrame.IrradianceIndex = m_pIrradianceAtlas->GetSRVDesc()->GetDescriptorIndex();
+	raytracePerFrame.IrradianceThreshold = m_fIrradianceThreshold;
 	raytracePerFrame.MaxRayDistance = m_fMaxRayDistance;
-	raytracePerFrame.MissRadiance = DirectX::XMFLOAT3(1, 0, 0);
+	raytracePerFrame.MissRadiance = DirectX::XMFLOAT3(0, 0, 0);
 	raytracePerFrame.NormalBias = m_fNormalBias;
-	raytracePerFrame.ViewBias = m_fViewBias;
+	raytracePerFrame.NumDistanceTexels = m_iDistanceTexelsPerProbe;
+	raytracePerFrame.NumIrradianceTexels = m_iIrradianceTexelsPerProbe;
 	raytracePerFrame.ProbeCounts = m_ProbeCounts;
 	raytracePerFrame.ProbeSpacing = m_ProbeSpacing;
 	raytracePerFrame.RayDataFormat = (int)m_AtlasSize;
+	raytracePerFrame.RayDataIndex = m_pRayDataAtlas->GetSRVDesc()->GetDescriptorIndex();
+	raytracePerFrame.RayRotation = m_RayRotation;
+	raytracePerFrame.ViewBias = m_fViewBias;
 	raytracePerFrame.RaysPerProbe = m_iRaysPerProbe;
 	raytracePerFrame.VolumePosition = m_Position;
 	
 	m_pRaytracedPerFrameUpload->CopyData(0, raytracePerFrame);
+}
+
+static std::uniform_real_distribution<float> s_distribution(0.f, 1.f);
+
+void GIVolume::UpdateRandomRotation()
+{
+	// This approach is based on James Arvo's implementation from Graphics Gems 3 (pg 117-120).
+// Also available at: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.53.1357&rep=rep1&type=pdf
+
+// Setup a random rotation matrix using 3 uniform RVs
+	float u1 = XM_PI * s_distribution(m_rng) * 2.0f;
+	float cos1 = cosf(u1);
+	float sin1 = sinf(u1);
+
+	float u2 = XM_PI * s_distribution(m_rng) * 2.0f;
+	float cos2 = cosf(u2);
+	float sin2 = sinf(u2);
+
+	float u3 = s_distribution(m_rng);
+	float sq3 = 2.f * sqrtf(u3 * (1.f - u3));
+
+	float s2 = 2.f * u3 * sin2 * sin2 - 1.f;
+	float c2 = 2.f * u3 * cos2 * cos2 - 1.f;
+	float sc = 2.f * u3 * sin2 * cos2;
+
+	// Create the random rotation matrix
+	float _11 = cos1 * c2 - sin1 * sc;
+	float _12 = sin1 * c2 + cos1 * sc;
+	float _13 = sq3 * cos2;
+
+	float _21 = cos1 * sc - sin1 * s2;
+	float _22 = sin1 * sc + cos1 * s2;
+	float _23 = sq3 * sin2;
+
+	float _31 = cos1 * (sq3 * cos2) - sin1 * (sq3 * sin2);
+	float _32 = sin1 * (sq3 * cos2) + cos1 * (sq3 * sin2);
+	float _33 = 1.f - 2.f * u3;
+
+	// HLSL is column-major
+	DirectX::XMFLOAT3X3 transform(_11, _12, _13, _21, _22, _23, _31, _32, _33);
+
+	XMStoreFloat4(&m_RayRotation, XMQuaternionNormalize(XMQuaternionRotationMatrix(XMLoadFloat3x3(&transform))));
 }
 
 DXGI_FORMAT GIVolume::GetRayDataFormat()
@@ -935,4 +1189,154 @@ void GIVolume::CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_
 	pHitGroup->SetClosestHitShaderImport(shaderName);
 	pHitGroup->SetHitGroupExport(shaderExport);
 	pHitGroup->SetHitGroupType(hitGroupType);
+}
+
+void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
+{
+	GPU_PROFILE_BEGIN(GpuStats::TRACE_RAYS, pGraphicsCommandList)
+	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Populate Ray Data"));
+
+	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
+	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
+	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
+	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
+	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
+	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
+	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
+	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
+	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
+	dispatchDesc.Width = m_iRaysPerProbe;
+	dispatchDesc.Height = m_ProbeCounts.x * m_ProbeCounts.y * m_ProbeCounts.z;
+	dispatchDesc.Depth = 1;
+
+	pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
+
+	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
+	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
+
+	pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
+
+	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
+
+	pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
+
+	pGraphicsCommandList->DispatchRays(&dispatchDesc);
+
+	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::TRACE_RAYS, pGraphicsCommandList)
+}
+
+void GIVolume::BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
+{
+	GPU_PROFILE_BEGIN(GpuStats::BLEND_PROBES, pGraphicsCommandList)
+	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Blend Probe Atlases"));
+
+	DirectX::XMINT2 probeCounts = DirectX::XMINT2(m_ProbeCounts.x * m_ProbeCounts.y, m_ProbeCounts.z);
+	int threadGroupSize = 8;
+
+	CD3DX12_RESOURCE_BARRIER* pResourceBarriers = new CD3DX12_RESOURCE_BARRIER[2];
+	pResourceBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(m_pIrradianceAtlas->GetResource().Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	pResourceBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(m_pDistanceAtlas->GetResource().Get(), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+	pGraphicsCommandList->ResourceBarrier(2, pResourceBarriers);
+
+	GPU_PROFILE_BEGIN(GpuStats::ATLAS_BLEND_PROBES, pGraphicsCommandList)
+
+	//Irradiance main blend
+	{
+		pGraphicsCommandList->SetPipelineState(m_pIrradianceBlendPSO.Get());
+
+		pGraphicsCommandList->SetComputeRootSignature(m_pProbeBlendingRootSignature.Get());
+
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS, pSRVHeap->GetGpuDescriptorHandle(m_pIrradianceAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
+
+		pGraphicsCommandList->Dispatch(probeCounts.x, probeCounts.y, 1);
+	}
+
+	//Distance main blend
+	{
+		pGraphicsCommandList->SetPipelineState(m_pDistanceBlendPSO.Get());
+
+		pGraphicsCommandList->SetComputeRootSignature(m_pProbeBlendingRootSignature.Get());
+
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS, pSRVHeap->GetGpuDescriptorHandle(m_pDistanceAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
+
+		pGraphicsCommandList->Dispatch(probeCounts.x, probeCounts.y, 1);
+	}
+
+	GPU_PROFILE_END(GpuStats::ATLAS_BLEND_PROBES, pGraphicsCommandList)
+
+	GPU_PROFILE_BEGIN(GpuStats::BORDER_BLEND_PROBES, pGraphicsCommandList)
+
+	//Irradiance row and column
+	{
+		DirectX::XMINT2 numGroups = DirectX::XMINT2(ceil(probeCounts.x * (m_iIrradianceTexelsPerProbe + 2) / (float)threadGroupSize), ceil(probeCounts.y / (float)threadGroupSize));
+
+		pGraphicsCommandList->SetPipelineState(m_pIrradianceRowBlendPSO.Get());
+
+		pGraphicsCommandList->SetComputeRootSignature(m_pProbeBlendingRootSignature.Get());
+
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS, pSRVHeap->GetGpuDescriptorHandle(m_pIrradianceAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
+
+		pGraphicsCommandList->Dispatch(numGroups.x, numGroups.y, 1);
+
+		numGroups = DirectX::XMINT2(ceil(probeCounts.x / (float)threadGroupSize), ceil(probeCounts.y * (m_iIrradianceTexelsPerProbe + 2) / (float)threadGroupSize));
+
+		pGraphicsCommandList->SetPipelineState(m_pIrradianceColumnBlendPSO.Get());
+
+		pGraphicsCommandList->Dispatch(numGroups.x, numGroups.y, 1);
+	}
+
+	//Distance row and column
+	{
+		DirectX::XMINT2 numGroups = DirectX::XMINT2(ceil(probeCounts.x * (m_iDistanceTexelsPerProbe + 2) / (float)threadGroupSize), ceil(probeCounts.y / (float)threadGroupSize));
+
+		pGraphicsCommandList->SetPipelineState(m_pDistanceRowBlendPSO.Get());
+
+		pGraphicsCommandList->SetComputeRootSignature(m_pProbeBlendingRootSignature.Get());
+
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::TEXTURE_ATLAS, pSRVHeap->GetGpuDescriptorHandle(m_pDistanceAtlas->GetUAVDesc()->GetDescriptorIndex()));
+		pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::ProbeBlendingRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+		pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::ProbeBlendingRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());
+
+		pGraphicsCommandList->Dispatch(numGroups.x, numGroups.y, 1);
+
+		numGroups = DirectX::XMINT2(ceil(probeCounts.x / (float)threadGroupSize), ceil(probeCounts.y * (m_iDistanceTexelsPerProbe + 2) / (float)threadGroupSize));
+
+		pGraphicsCommandList->SetPipelineState(m_pDistanceColumnBlendPSO.Get());
+
+		pGraphicsCommandList->Dispatch(numGroups.x, numGroups.y, 1);
+	}
+
+	GPU_PROFILE_END(GpuStats::BORDER_BLEND_PROBES, pGraphicsCommandList)
+
+	pResourceBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(m_pIrradianceAtlas->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	pResourceBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(m_pDistanceAtlas->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+	pGraphicsCommandList->ResourceBarrier(2, pResourceBarriers);
+
+	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::BLEND_PROBES, pGraphicsCommandList)
+}
+
+void GIVolume::DrawIndirect(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
+{
+	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Draw indirect light"));
+
+	PIX_ONLY(PIXEndEvent());
 }

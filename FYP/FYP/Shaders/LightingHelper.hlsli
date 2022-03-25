@@ -1,3 +1,8 @@
+#ifndef LIGHTING_HELPER_HLSL
+#define LIGHTING_HELPER_HLSL
+
+#include "Defines.hlsli"
+
 float NormalDistribution(float3 normal, float3 halfVec, float fRoughness)
 {
     float fRoughSq = fRoughness * fRoughness * fRoughness * fRoughness;
@@ -44,3 +49,5 @@ float3 GetNormal(float2 uv, float3 normal, float3 tangent, Texture2D tex, Sample
     //Transform to world space
     return normalize(mul(normalT, tbn));
 }
+
+#endif

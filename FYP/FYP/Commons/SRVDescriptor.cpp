@@ -23,6 +23,7 @@ SRVDescriptor::SRVDescriptor(UINT uiDescriptorIndex, D3D12_CPU_DESCRIPTOR_HANDLE
 	srvDesc.Texture2D.MostDetailedMip = 0;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 	srvDesc.Texture2D.MipLevels = uiMipMapLevels;
+	srvDesc.Texture2D.PlaneSlice = 0;
 	srvDesc.Format = format;
 
 	App::GetApp()->GetDevice()->CreateShaderResourceView(pResource, &srvDesc, handle);

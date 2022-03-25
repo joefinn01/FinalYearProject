@@ -196,6 +196,8 @@ bool App::Init()
 	PopulatePrimitivePerInstanceCB();
 	PopulateDeferredPerFrameCB();
 
+	DebugHelper::Init(m_pDevice.Get(), m_pCommandQueue.Get());
+
 	OnResize();
 
 	Load();
@@ -255,14 +257,6 @@ void App::Update(const Timer& kTimer)
 	InputManager::GetInstance()->Update(kTimer);
 
 	ObjectManager::GetInstance()->GetActiveCamera()->Update(kTimer);
-
-	GameObject* pGameObject = ObjectManager::GetInstance()->GetGameObject("Fish");
-
-	//pGameObject->Rotate(0, 20.0f * kTimer.DeltaTime(), 0);
-
-	//pGameObject = ObjectManager::GetInstance()->GetGameObject("WaterBottle");
-
-	//pGameObject->Rotate(0, 10.0f * kTimer.DeltaTime(), 0);
 
 	UpdatePerFrameCB(m_uiFrameIndex);
 
@@ -466,6 +460,13 @@ void App::Draw()
 			return;
 		}
 
+#if PROFILE_TIMERS
+		DebugHelper::UpdateTimestamps();
+		DebugHelper::BeginFrame(m_pGraphicsCommandList.Get());
+#endif
+
+		GPU_PROFILE_BEGIN(GpuStats::FULL_FRAME, m_pGraphicsCommandList)
+
 		PopulateRenderInfoQueue();
 
 		PopulatePrimitiveIndexCB();
@@ -475,12 +476,19 @@ void App::Draw()
 
 		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+		m_pGIVolume->Draw(m_pSRVHeap, m_pScenePerFrameCBUpload, m_pGraphicsCommandList.Get());
+
 		DrawDeferredPass();
 
-		m_pGIVolume->Draw(m_pSRVHeap, m_pScenePerFrameCBUpload, m_pGraphicsCommandList.Get());
+		GPU_PROFILE_END(GpuStats::FULL_FRAME, m_pGraphicsCommandList)
 	}
 
 	DrawImGui();
+
+#if PROFILE_TIMERS
+	DebugHelper::EndFrame(m_pGraphicsCommandList.Get());
+	DebugHelper::ResolveTimestamps(m_pGraphicsCommandList.Get());
+#endif
 
 	hr = m_pGraphicsCommandList->Close();
 
@@ -526,7 +534,7 @@ void App::Draw()
 void App::DrawDeferredPass()
 {
 	PROFILE("Deferred Pass");
-
+	GPU_PROFILE_BEGIN(GpuStats::DEFERRED_PASS, m_pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Deferred Render"));
 
 	DrawGBufferPass();
@@ -534,12 +542,13 @@ void App::DrawDeferredPass()
 	DrawLightPass();
 
 	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::DEFERRED_PASS, m_pGraphicsCommandList)
 }
 
 void App::DrawGBufferPass()
 {
 	PROFILE("G Buffer Pass");
-
+	GPU_PROFILE_BEGIN(GpuStats::GBUFFER, m_pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "G Buffer Pass"));
 
 	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pGBufferRootSignature.Get());
@@ -556,8 +565,7 @@ void App::DrawGBufferPass()
 		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	}
 
-	//Last index is depth stencil buffer transition
-	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
 
@@ -566,7 +574,7 @@ void App::DrawGBufferPass()
 		m_pGraphicsCommandList->ClearRenderTargetView(m_pRTVHeap->GetCpuDescriptorHandle(GetGBufferRTVDescs()[i]->GetDescriptorIndex()), m_GBufferClearColors[i], 0, nullptr);
 	}
 
-	m_pGraphicsCommandList->ClearDepthStencilView(m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+	m_pGraphicsCommandList->ClearDepthStencilView(m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE* pRenderTargetDescs = new D3D12_CPU_DESCRIPTOR_HANDLE[(int)GBuffer::COUNT];
 
@@ -610,11 +618,15 @@ void App::DrawGBufferPass()
 				break;
 
 			case PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NOTHING].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::METALLIC_ROUGHNESS].Get());
+				break;
+
+			case PrimitiveAttributes::ALBEDO:
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::ALBEDO].Get());
 				break;
 
 			default:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NO_METALLIC_ROUGHNESS].Get());
+				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)ShaderVersions::NOTHING].Get());
 				break;
 			}
 
@@ -640,17 +652,18 @@ void App::DrawGBufferPass()
 		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
 	}
 
-	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_DEPTH_READ);
+	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
 
 	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
 
 	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::GBUFFER, m_pGraphicsCommandList)
 }
 
 void App::DrawLightPass()
 {
 	PROFILE("Light Pass");
-
+	GPU_PROFILE_BEGIN(GpuStats::LIGHT, m_pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Light Pass"));
 
 	m_pGraphicsCommandList->SetPipelineState(m_pLightPSO.Get());
@@ -668,6 +681,8 @@ void App::DrawLightPass()
 	m_pGraphicsCommandList->OMSetRenderTargets(1, &GetBackBufferView(), FALSE, nullptr);
 
 	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_DEFERRED_CB, GetDeferredPerFrameUploadBuffer()->GetBufferGPUAddress());
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB, m_pGIVolume->GetRaytracePerFrameUpload()->GetBufferGPUAddress());
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
 	vertexBufferView.BufferLocation = m_pScreenQuadVertexBufferGPU->GetGPUVirtualAddress();
@@ -683,6 +698,7 @@ void App::DrawLightPass()
 	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(GetBackBuffer(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT));
 
 	PIX_ONLY(PIXEndEvent());
+	GPU_PROFILE_END(GpuStats::LIGHT, m_pGraphicsCommandList)
 }
 
 int App::Run()
@@ -1163,7 +1179,7 @@ bool App::CreateGBufferPSO()
 	psoDesc.NumRenderTargets = (UINT)GBuffer::COUNT;
 	psoDesc.SampleDesc.Count = 1;
 	psoDesc.SampleDesc.Quality = 0;
-	psoDesc.DSVFormat = m_DepthStencilFormat;
+	psoDesc.DSVFormat = m_DepthStencilDSVFormat;
 	psoDesc.VS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_wsGBufferVertexName].Get()->GetBufferPointer(), m_Shaders[m_wsGBufferVertexName].Get()->GetBufferSize());
 
 	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
@@ -1194,7 +1210,7 @@ bool App::CreateLightPSO()
 	D3D12_DEPTH_STENCIL_DESC depthDesc;
 	depthDesc.DepthEnable = false;
 	depthDesc.StencilEnable = false;
-	depthDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	depthDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.InputLayout = { m_ScreenQuadInputDesc.data(), (UINT)m_ScreenQuadInputDesc.size() };
@@ -1265,32 +1281,46 @@ bool App::CompileShaders()
 	ComPtr<IDxcBlob> pBlob;
 
 	//Create different preprocessor define configs.
+	LPCWSTR albedo[] =
+	{
+		L"ALBEDO=1",
+	};
+
 	LPCWSTR normal[] =
 	{
-		L"NORMAL_MAPPING=1"
+		L"NORMAL_MAPPING=1",
+		L"METALLIC_ROUGHNESS=1",
+		L"ALBEDO=1",
 	};
 
 	LPCWSTR occlusion[] =
 	{
 		L"OCCLUSION_MAPPING=1",
+		L"METALLIC_ROUGHNESS=1",
+		L"ALBEDO=1",
 	};
 
-	LPCWSTR noMetallicRoughness[] =
+	LPCWSTR metallicRoughness[] =
 	{
-		L"NO_METALLIC_ROUGHNESS=1",
+		L"METALLIC_ROUGHNESS=1",
+		L"ALBEDO=1",
 	};
 
 	LPCWSTR normalOcclusion[] =
 	{
 		L"NORMAL_MAPPING=1",
-		L"OCCLUSION_MAPPING=1"
+		L"OCCLUSION_MAPPING=1",
+		L"METALLIC_ROUGHNESS=1",
+		L"ALBEDO=1",
 	};
 
 	LPCWSTR normalOcclusionEmission[] =
 	{
 		L"NORMAL_MAPPING=1",
 		L"OCCLUSION_MAPPING=1",
-		L"EMISSION_MAPPING=1"
+		L"EMISSION_MAPPING=1",
+		L"METALLIC_ROUGHNESS=1",
+		L"ALBEDO=1",
 	};
 
 	//Create array of shaders to compile
@@ -1303,7 +1333,8 @@ bool App::CompileShaders()
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::NO_METALLIC_ROUGHNESS], L"ps_6_3", L"main", noMetallicRoughness, (int)_countof(noMetallicRoughness)),	//No metallic roughness or anything else
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::METALLIC_ROUGHNESS], L"ps_6_3", L"main", metallicRoughness, (int)_countof(metallicRoughness)),	//No metallic roughness or anything else
+		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)ShaderVersions::ALBEDO], L"ps_6_3", L"main", albedo, (int)_countof(albedo)),	//Just albedo
 
 
 		//Light pass shaders
@@ -1337,9 +1368,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "FlightHelmet", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/WaterBottle/gLTF/WaterBottle.gltf", "WaterBottle", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/BoomBox/gLTF/BoomBox.gltf", "BoomBox", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Cornell/Cornell.gltf", "Cornell", m_pGraphicsCommandList.Get());
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -1361,6 +1390,8 @@ bool App::CreateOutputBuffers()
 	resDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	resDesc.MipLevels = 1;
 	resDesc.SampleDesc.Count = 1;
+	resDesc.SampleDesc.Quality = 0;
+	resDesc.Alignment = 0;
 
 	D3D12_HEAP_PROPERTIES heapProperties = {};
 	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -1420,7 +1451,7 @@ bool App::CreateOutputBuffers()
 		resDesc.Format = m_DepthStencilFormat;
 		resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
-		hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_DEPTH_READ, &DepthStencilClear, IID_PPV_ARGS(GetDepthStencilBuffer(i)->GetResourcePtr()->GetAddressOf()));
+		hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, &DepthStencilClear, IID_PPV_ARGS(GetDepthStencilBuffer(i)->GetResourcePtr()->GetAddressOf()));
 
 		if (FAILED(hr))
 		{
@@ -1509,7 +1540,7 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 0), XMFLOAT3(1, 0, 0), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, -1), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
 
 	ObjectManager::GetInstance()->AddCamera(pCamera);
 
@@ -1543,27 +1574,17 @@ void App::CreateScreenQuad()
 void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
-	MeshManager::GetInstance()->GetMesh("FlightHelmet", pMesh);
+	MeshManager::GetInstance()->GetMesh("Cornell", pMesh);
 
 	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Fish", XMFLOAT3(5, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(3, 3, 3), pMesh);
-
-	MeshManager::GetInstance()->GetMesh("WaterBottle", pMesh);
-
-	pGameObject = new GameObject();
-	pGameObject->Init("WaterBottle", XMFLOAT3(5, 0, 5), XMFLOAT3(0, 0, 0), XMFLOAT3(4.0f, 4.0f, 4.0f), pMesh);
-
-	MeshManager::GetInstance()->GetMesh("BoomBox", pMesh);
-
-	pGameObject = new GameObject();
-	pGameObject->Init("BoomBox", XMFLOAT3(5, 0, -5), XMFLOAT3(0, 0, 0), XMFLOAT3(25, 25, 25), pMesh);
+	pGameObject->Init("Cornell", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
 
 	GIVolumeDesc volumeDesc;
-	volumeDesc.Position = XMFLOAT3();
-	volumeDesc.ProbeCounts = XMINT3(5, 5, 5);
+	volumeDesc.Position = XMFLOAT3(0, 1, 0);
+	volumeDesc.ProbeCounts = XMINT3(9, 9, 9);
 	volumeDesc.ProbeRelocation = false;
-	volumeDesc.ProbeScale = 1.0f;
-	volumeDesc.ProbeSpacing = XMFLOAT3(5, 5, 5);
+	volumeDesc.ProbeScale = 0.1f;
+	volumeDesc.ProbeSpacing = XMFLOAT3(0.3f, 0.3f, 0.3f);
 	volumeDesc.ProbeTracking = false;
 
 	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
@@ -1581,8 +1602,8 @@ void App::InitConstantBuffers()
 	}
 
 	//m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
-	m_LightCBs[0].Color = XMFLOAT4(0.93f, 0.19f, 0.14f, 1);
-	m_LightCBs[0].Position = XMFLOAT3(0, 0, 0);
+	m_LightCBs[0].Color = XMFLOAT4(1, 1, 1, 1);
+	m_LightCBs[0].Position = XMFLOAT3(0, 2.0f, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
 
 	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
@@ -2010,7 +2031,7 @@ bool App::CreateGBufferSignature()
 
 bool App::CreateLightSignature()
 {
-	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::GBufferPass::COUNT] = {};
+	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::LightPass::COUNT] = {};
 
 	//SRV descriptors
 	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -2031,6 +2052,13 @@ bool App::CreateLightSignature()
 	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.RegisterSpace = 0;
 	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.ShaderRegister = 1;
 	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+	//Raytrace per frame CB
+	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.ShaderRegister = 2;
+	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
 
@@ -2080,7 +2108,14 @@ void App::PopulatePrimitivePerInstanceCB()
 		{
 			for (int j = 0; j < pNodes->at(i)->m_Primitives.size(); ++j)
 			{
-				primitiveInstanceCB.AlbedoIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iAlbedoIndex)->GetSRVDesc()->GetDescriptorIndex();
+				if (pNodes->at(i)->m_Primitives[j]->HasAttribute(PrimitiveAttributes::ALBEDO) == true)
+				{
+					primitiveInstanceCB.AlbedoIndex = it->second->GetTextures()->at(pNodes->at(i)->m_Primitives[j]->m_iAlbedoIndex)->GetSRVDesc()->GetDescriptorIndex();
+				}
+				else
+				{
+					primitiveInstanceCB.AlbedoColor = pNodes->at(i)->m_Primitives[j]->m_BaseColour;
+				}
 
 				if (pNodes->at(i)->m_Primitives[j]->HasAttribute(PrimitiveAttributes::METALLIC_ROUGHNESS) == true)
 				{

@@ -1,5 +1,6 @@
 #include "RasterCommons.hlsli"
 #include "LightingHelper.hlsli"
+#include "Irradiance.hlsl"
 
 struct PS_INPUT
 {
@@ -8,12 +9,13 @@ struct PS_INPUT
 };
 
 ConstantBuffer<DeferredPerFrameCB> l_DeferredPerFrameCB : register(b1);
+ConstantBuffer<RaytracePerFrameCB> l_RaytracePerFrameCB : register(b2);
 
 float4 main(PS_INPUT input) : SV_TARGET
 {    
     //Get primitive information from textures
     float3 normalW = normalize((Tex2DTable[l_DeferredPerFrameCB.NormalIndex].Sample(SamLinearClamp, input.TexCoords).xyz * 2.0f) - 1.0f);
-    float depth = FloatTex2DTable[l_DeferredPerFrameCB.DepthIndex].Sample(SamLinearClamp, input.TexCoords);
+    float depth = Tex2DTable[l_DeferredPerFrameCB.DepthIndex].Sample(SamLinearClamp, input.TexCoords).r;
     float3 albedo = pow(Tex2DTable[l_DeferredPerFrameCB.AlbedoIndex].SampleLevel(SamAnisotropicWrap, input.TexCoords, 0).rgb, 2.2f).xyz;
     float3 fMetallicRoughnessOcclusion = Tex2DTable[l_DeferredPerFrameCB.MetallicRoughnessOcclusion].SampleLevel(SamPointWrap, input.TexCoords, 0).xyz;
     
@@ -60,6 +62,19 @@ float4 main(PS_INPUT input) : SV_TARGET
     }
     
     float4 color = float4((float3(0.03f, 0.03f, 0.03f) * fMetallicRoughnessOcclusion.b * albedo) + outgoingRadiance, 1.0f);
+    
+    float blendWeight = GetBlendWeight(hitPosW.xyz, l_RaytracePerFrameCB.VolumePosition, l_RaytracePerFrameCB.ProbeSpacing, l_RaytracePerFrameCB.ProbeCounts);
+    float3 surfaceBias = GetSurfaceBias(normalW, -viewW, l_RaytracePerFrameCB.NormalBias, l_RaytracePerFrameCB.ViewBias);
+    float4 indirectLight = GetIrradiance(hitPosW.xyz, surfaceBias, normalW, l_RaytracePerFrameCB);
+    
+    if (blendWeight > 0.0f)
+    {
+#if !SHOW_INDIRECT
+        color.rgb = (albedo.rgb * indirectLight.rgb * blendWeight) / PI;
+#else
+        color.rgb += (albedo.rgb * indirectLight.rgb * blendWeight) / PI;
+#endif
+    }
     
     //Map and gamma correct
     float fMapping = 1.0f / 2.2f;

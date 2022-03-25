@@ -3,15 +3,6 @@
 
 #include "Commons.hlsli"
 
-#define HIT_TYPE_TRIANGLE_BACK_FACE 0
-#define HIT_TYPE_TRIANGLE_FRONT_FACE 1
-
-#define FORMAT_PROBE_RAY_DATA_R32G32_FLOAT 0
-#define FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT 1
-
-#define FORMAT_PROBE_IRRADIANCE_R10G10B10A2_FLOAT 0
-#define FORMAT_PROBE_IRRADIANCE_R32G32B32A32_FLOAT 1
-
 ConstantBuffer<RaytracePerFrameCB> g_RaytracePerFrame : register(b1);
 
 StructuredBuffer<Vertex> Vertices[] : register(t0, space100);
@@ -19,27 +10,6 @@ StructuredBuffer<Vertex> Vertices[] : register(t0, space100);
 RaytracingAccelerationStructure Scene : register(t0, space200);
 
 RWTexture2D<float4> RayData : register(u0);
-
-struct PackedPayload
-{
-    float HitDistance;
-    float3 PosW;
-    uint4 Packed0;  //X = Albedo R && Albedo G, Y = Albedo B and Normal X, Z = Normal  and Normal Z, W = Metallic and Roughness
-    uint4 Packed1;  //X = ShadingNormal X and ShadingNormal Y, Y = ShadingNormal Z and Opacity Z = Hit Type
-};
-
-struct Payload
-{
-    float3 Albedo;
-    float Opacity;
-    float3 PosW;
-    float Metallic;
-    float3 NormalW;
-    float Roughness;
-    float3 ShadingNormalW;
-    float HitDistance;
-    uint HitType;
-};
 
 struct Ray
 {

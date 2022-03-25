@@ -57,6 +57,8 @@ struct PrimitiveInstanceCB
 	UINT32 AlbedoIndex;
 	UINT32 NormalIndex;
 
+	XMFLOAT4 AlbedoColor;
+
 	UINT32 MetallicRoughnessIndex;
 	UINT32 OcclusionIndex;
 	XMFLOAT2 pad;
@@ -84,8 +86,22 @@ struct RaytracePerFrameCB
 	XMFLOAT3 MissRadiance;
 	float NormalBias;
 
+	XMFLOAT4 RayRotation;
+
 	float ViewBias;
-	XMFLOAT3 pad;
+	float DistancePower;
+	float Hysteresis;
+	float IrradianceGammaEncoding;
+
+	float IrradianceThreshold;
+	float BrightnessThreshold;
+	int NumDistanceTexels;
+	int NumIrradianceTexels;
+
+	int IrradianceIndex;
+	int DistanceIndex;
+	int IrradianceFormat;
+	int RayDataIndex;
 };
 
 #endif // CONSTANT_BUFFERS_H

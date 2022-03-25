@@ -74,6 +74,7 @@ namespace DeferredPass
 			STANDARD_DESCRIPTORS = 0,
 			PER_FRAME_SCENE_CB,
 			PER_FRAME_DEFERRED_CB,
+			PER_FRAME_RAYTRACE_CB,
 			COUNT
 		};
 	}
@@ -82,7 +83,8 @@ namespace DeferredPass
 enum class ShaderVersions
 {
 	NOTHING = 0,
-	NO_METALLIC_ROUGHNESS,
+	ALBEDO,
+	METALLIC_ROUGHNESS,
 	NORMAL,
 	OCCLUSION,
 	NORMAL_OCCLUSION,
@@ -305,6 +307,7 @@ protected:
 	LPCWSTR m_GBufferPixelNames[(int)ShaderVersions::COUNT] =
 	{
 		L"GBufferPixel",
+		L"GBufferPixelAlbedo",
 		L"GBufferPixelNoMetallicRoughness",
 		L"GBufferPixelNormal",
 		L"GBufferPixelOcclusion",
@@ -323,7 +326,7 @@ protected:
 	UINT m_uiMSAAQuality = 0;
 
 	DXGI_FORMAT m_BackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-	DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	DXGI_FORMAT m_DepthStencilFormat = DXGI_FORMAT_R24G8_TYPELESS;
 	DXGI_FORMAT m_DepthStencilSRVFormat = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
 	DXGI_FORMAT m_DepthStencilDSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 

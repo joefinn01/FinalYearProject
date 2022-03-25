@@ -1,5 +1,7 @@
 #include "ProbeHelper.hlsl"
 #include "RaytracedLightingHelper.hlsl"
+#include "RaytracingCommons.hlsli"
+#include "Irradiance.hlsl"
 
 [shader("raygeneration")]
 void RayGen()
@@ -9,11 +11,11 @@ void RayGen()
     int rayIndex = dispatchIndex.x;
     int probeIndex = dispatchIndex.y;
     
-    int3 probeCoords = GetProbeCoords(probeIndex);
+    int3 probeCoords = GetProbeCoords(probeIndex, g_RaytracePerFrame.ProbeCounts);
     
-    float3 probeCoordsW = GetProbeCoordsWorld(probeCoords);
+    float3 probeCoordsW = GetProbeCoordsWorld(probeCoords, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
     
-    float3 directionW = GetProbeRayDirection(rayIndex);
+    float3 directionW = GetProbeRayDirection(rayIndex, g_RaytracePerFrame.RaysPerProbe, g_RaytracePerFrame.RayRotation);
     
     uint2 texCoords = uint2(rayIndex, probeIndex);
     
@@ -22,42 +24,42 @@ void RayGen()
     RayDesc ray;
     ray.Origin = probeCoordsW;
     ray.Direction = directionW;
-    ray.TMin = 0.001;
+    ray.TMin = 0.0f;
     ray.TMax = g_RaytracePerFrame.MaxRayDistance;
     
     PackedPayload packedPayload = (PackedPayload)0;
     
-    TraceRay(Scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, packedPayload);
+    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, packedPayload);
 
     if (packedPayload.HitDistance < 0.0f)   //If missed
     {
-        StoreRayMiss(texCoords);
+        StoreRayMiss(texCoords, g_RaytracePerFrame.RayDataFormat, g_RaytracePerFrame.MissRadiance, RayData);
         
         return;
     }
     
     Payload payload = UnpackPayload(packedPayload);
     
-    if (payload.HitType == HIT_TYPE_TRIANGLE_BACK_FACE) //If hit backface
+    if (payload.HitType == HIT_KIND_TRIANGLE_BACK_FACE) //If hit backface
     {
-        StoreRayBackfaceHit(texCoords, packedPayload.HitDistance);
+        StoreRayBackfaceHit(texCoords, packedPayload.HitDistance, g_RaytracePerFrame.RayDataFormat, RayData);
         return;
     }
     
     float3 diffuseLight = CalculateDirectDiffuseLight(payload);
-    float3 surfaceBias = GetSurfaceBias(payload.NormalW, directionW);
-    float blendWeight = GetBlendWeight(payload.PosW);
+    float3 surfaceBias = GetSurfaceBias(payload.NormalW, directionW, g_RaytracePerFrame.NormalBias, g_RaytracePerFrame.ViewBias);
+    float blendWeight = GetBlendWeight(payload.PosW, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
     
-    float3 irradiance = float3(0, 0, 0);
+    float4 irradiance = float4(0, 0, 0, -1);
     
     if(blendWeight > 0.0f)
     {
-        irradiance = GetIrradiance(payload.PosW, surfaceBias, payload.NormalW);
+        irradiance = GetIrradiance(payload.PosW, surfaceBias, payload.NormalW, g_RaytracePerFrame);
         
-        irradiance *= blendWeight;
+        irradiance.xyz *= blendWeight;
     }
     
-    float3 radiance = diffuseLight + ((min(payload.Albedo, float3(0.9f, 0.9f, 0.9f)) * irradiance) / PI);
+    float3 radiance = diffuseLight + ((min(payload.Albedo, float3(0.9f, 0.9f, 0.9f)) * irradiance.xyz) / PI);
     
-    StoreRayFrontfaceHit(texCoords, radiance, payload.HitDistance);
+    StoreRayFrontfaceHit(texCoords, radiance, payload.HitDistance, g_RaytracePerFrame.RayDataFormat, RayData);
 }

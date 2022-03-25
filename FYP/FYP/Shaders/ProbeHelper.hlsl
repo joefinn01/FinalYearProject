@@ -1,190 +1,178 @@
-#include "RaytracingCommons.hlsli"
+#ifndef PROBE_HELPER_HLSL
+#define PROBE_HELPER_HLSL
 
-uint FloatToUint(float val, float scale)
-{
-    return (uint) floor(val * scale + 0.5f);
-}
+#include "MathHelper.hlsl"
+#include "Octahedral.hlsl"
+#include "Payloads.hlsli"
+#include "Defines.hlsli"
 
-uint Float3ToUint(float3 input)
-{
-    return FloatToUint(input.r, 1023.0f) | (FloatToUint(input.g, 1023.0f) << 10) | (FloatToUint(input.b, 1023.0f) << 20);
-}
-
-int3 GetProbeCoords(int probeIndex)
-{
+int3 GetProbeCoords(int probeIndex, int3 probeCounts)
+{    
     int3 coords;
     
-    coords.x = probeIndex % g_RaytracePerFrame.ProbeCounts.x;
-    coords.y = probeIndex / (g_RaytracePerFrame.ProbeCounts.x * g_RaytracePerFrame.ProbeCounts.z);
-    coords.z = (probeIndex / g_RaytracePerFrame.ProbeCounts.x) % g_RaytracePerFrame.ProbeCounts.z;
+    coords.x = probeIndex % probeCounts.x;
+    coords.y = probeIndex / (probeCounts.x * probeCounts.z);
+    coords.z = (probeIndex / probeCounts.x) % probeCounts.z;
     
     return coords;
 }
 
-int GetProbeIndex(int3 probeCoords)
+int GetProbeIndex(int3 probeCoords, int3 probeCounts)
 {
     //Probes per plane * current plane index + probe index in current plane
-    return (g_RaytracePerFrame.ProbeCounts.x * g_RaytracePerFrame.ProbeCounts.z * probeCoords.z) + probeCoords.x + (g_RaytracePerFrame.ProbeCounts.x * probeCoords.z);
+    return (probeCounts.x * probeCounts.z * probeCoords.y) + probeCoords.x + (probeCounts.x * probeCoords.z);
 
 }
 
-float3 GetProbeCoordsWorld(int3 probeCoords)
+int GetProbeIndex(int2 texCoords, int numTexels, int3 probeCounts)
 {
-    return g_RaytracePerFrame.VolumePosition - ((g_RaytracePerFrame.ProbeCounts - 1) * g_RaytracePerFrame.ProbeSpacing * 0.5f) + (probeCoords * g_RaytracePerFrame.ProbeSpacing);
-}
-
-float3 GetFibonacciSpiralDirection(float index, float numSamples)
-{
-    const float PHI = sqrt(5) * 0.5f + 0.5f;
-    float fraction = (index * (PHI - 1)) - floor(index * (PHI - 1));
-    float phi = 2.0f * PI * fraction;
-    float cosTheta = 1.0f - (2.0f * index + 1.0f) * (1.0f / numSamples);
-    float sinTheta = sqrt(saturate(1.0f - cosTheta * cosTheta));
-
-    return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-
-}
-
-float3 GetProbeRayDirection(int rayIndex)
-{
-    return normalize(GetFibonacciSpiralDirection(rayIndex, g_RaytracePerFrame.RaysPerProbe));
-}
-
-Payload UnpackPayload(PackedPayload packedPayload)
-{
-    Payload payload;
-    payload.HitDistance = packedPayload.HitDistance;
-    payload.PosW = packedPayload.PosW;
+    int planeIndex = int(texCoords.x / (numTexels * probeCounts.x));
+    int probeIndex = int(texCoords.x / numTexels) - (planeIndex * probeCounts.x) + (probeCounts.x * int(texCoords.y / numTexels));
     
-    payload.Albedo.r = f16tof32(packedPayload.Packed0.x);
-    payload.Albedo.g = f16tof32(packedPayload.Packed0.x >> 16); //Shift 16 bits so get second value
-    payload.Albedo.b = f16tof32(packedPayload.Packed0.y);
-    payload.NormalW.x = f16tof32(packedPayload.Packed0.y >> 16);
-    payload.NormalW.y = f16tof32(packedPayload.Packed0.z);
-    payload.NormalW.z = f16tof32(packedPayload.Packed0.z >> 16);
-    payload.Metallic = f16tof32(packedPayload.Packed0.w);
-    payload.Roughness = f16tof32(packedPayload.Packed0.w >> 16);
+    //Probes per plane * current plane index + probe index in current plane
+    return (probeCounts.x * probeCounts.z * planeIndex) + probeIndex;
 
-    payload.ShadingNormalW.x = f16tof32(packedPayload.Packed1.x);
-    payload.ShadingNormalW.y = f16tof32(packedPayload.Packed1.x >> 16);
-    payload.ShadingNormalW.z = f16tof32(packedPayload.Packed1.y);
-    payload.Opacity = f16tof32(packedPayload.Packed1.y >> 16);
-    payload.HitType = f16tof32(packedPayload.Packed1.z);
-
-    return payload;
 }
 
-PackedPayload PackPayload(Payload payload)
+float3 GetProbeCoordsWorld(int3 probeCoords, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
 {
-    PackedPayload packedPayload = (PackedPayload) 0;
-    
-    packedPayload.HitDistance = payload.HitDistance;
-    packedPayload.PosW = payload.PosW;
-    
-    packedPayload.Packed0.x = f32tof16(payload.Albedo.r);
-    packedPayload.Packed0.x |= f32tof16(payload.Albedo.g) << 16;
-    packedPayload.Packed0.y = f32tof16(payload.Albedo.b);
-    packedPayload.Packed0.y |= f32tof16(payload.NormalW.x) << 16;
-    packedPayload.Packed0.z = f32tof16(payload.NormalW.y);
-    packedPayload.Packed0.z |= f32tof16(payload.NormalW.z) << 16;
-    packedPayload.Packed0.w = f32tof16(payload.Metallic);
-    packedPayload.Packed0.w |= f32tof16(payload.Roughness) << 16;
-    
-    packedPayload.Packed1.x = f32tof16(payload.ShadingNormalW.x);
-    packedPayload.Packed1.x |= f32tof16(payload.ShadingNormalW.y) << 16;
-    packedPayload.Packed1.y = f32tof16(payload.ShadingNormalW.z);
-    packedPayload.Packed1.y |= f32tof16(payload.Opacity) << 16;
-    packedPayload.Packed1.z = f32tof16(payload.HitType);
-    
-    return packedPayload;
+    return volumePosition - ((probeCounts - 1) * probeSpacing * 0.5f) + (probeCoords * probeSpacing);
 }
 
-void StoreRayMiss(uint2 texCoords)
+float3 GetProbeRayDirection(int rayIndex, int raysPerProbe, float4 rayRotation)
 {
-    if (g_RaytracePerFrame.RayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
+    return normalize(QuaternionRotate(GetFibonacciSpiralDirection(rayIndex, raysPerProbe), QuaternionConjugate(rayRotation)));
+}
+
+void StoreRayMiss(uint2 texCoords, int rayDataFormat, float3 missRadiance, RWTexture2D<float4> rayData)
+{
+    if (rayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
     {
-        RayData[texCoords] = float4(g_RaytracePerFrame.MissRadiance, 1e27f);
+#if DEBUG_HIT_TYPES
+        rayData[texCoords] = float4(float3(1, 0, 0), 1e27f);
+#else
+        rayData[texCoords] = float4(missRadiance, 1e27f);
+#endif
     }
     else
     {
-        RayData[texCoords] = float4(Float3ToUint(g_RaytracePerFrame.MissRadiance), 1e27f, 0, 0);
+        rayData[texCoords] = float4(Float3ToUint(missRadiance), 1e27f, 0, 0);
     }
 }
 
-void StoreRayBackfaceHit(uint2 texCoords, float hitDistance)
+void StoreRayBackfaceHit(uint2 texCoords, float hitDistance, int rayDataFormat, RWTexture2D<float4> rayData)
 {
-    if (g_RaytracePerFrame.RayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)   //-ve means back face hit. Make magnitude shorter so has less influence
+    if (rayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
     {
-        RayData[texCoords].w = hitDistance * -0.2f;
+#if DEBUG_HIT_TYPES
+        rayData[texCoords] = float4(float3(0, 1, 0), 1e27f);
+#else
+        rayData[texCoords].w = -hitDistance * 0.2f;
+#endif
     }
     else
     {
-        RayData[texCoords].g = hitDistance * -0.2f;
+        rayData[texCoords].g = -hitDistance * 0.2f;
     }
 }
 
-void StoreRayFrontfaceHit(uint2 texCoords, float3 radiance, float hitDistance)
+void StoreRayFrontfaceHit(uint2 texCoords, float3 radiance, float hitDistance, int rayDataFormat, RWTexture2D<float4> rayData)
 {
-    if (g_RaytracePerFrame.RayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
+    if (rayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
     {
-        RayData[texCoords] = float4(radiance, hitDistance);
+#if DEBUG_HIT_TYPES
+        rayData[texCoords] = float4(float3(0, 0, 1), 1e27f);
+#else
+        rayData[texCoords] = float4(radiance, hitDistance);
+#endif
     }
     else
     {
-        static const float c_threshold = 1.f / 255.f;
+        static const float c_threshold = 1.0f / 255.0f;
         if (max(radiance.x, max(radiance.y, radiance.z)) <= c_threshold)    //Check if max component will fit into accuracy available
         {
             radiance.rgb = float3(0.f, 0.f, 0.f);
         }
 
-        RayData[texCoords] = float4(Float3ToUint(radiance), hitDistance, 0.f, 0.f);
+        rayData[texCoords] = float4(Float3ToUint(radiance), hitDistance, 0.f, 0.f);
     }
 }
 
-float3 GetSurfaceBias(float3 normal, float3 direction)
+float3 GetSurfaceBias(float3 normal, float3 direction, float normalBias, float viewBias)
 {
-    return (normal * g_RaytracePerFrame.NormalBias) - (direction * g_RaytracePerFrame.ViewBias);
+    return (normal * normalBias) + (-direction * viewBias);
 }
 
-int3 GetClosestProbeCoords(float3 posW)
+int3 GetClosestProbeCoords(float3 posW, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
 {
-    float3 relativePos = posW - g_RaytracePerFrame.VolumePosition;
-    relativePos += (g_RaytracePerFrame.ProbeSpacing * (g_RaytracePerFrame.ProbeCounts - 1)) * 0.5f;
+    float3 relativePos = posW - (volumePosition - (probeSpacing * (probeCounts - 1)) * 0.5f);
 
-    int3 probeCoords = int3(relativePos / g_RaytracePerFrame.ProbeSpacing);
+    int3 probeCoords = int3(relativePos / probeSpacing);
 
-    return clamp(probeCoords, int3(0, 0, 0), g_RaytracePerFrame.ProbeCounts - 1);
-
+    return clamp(probeCoords, int3(0, 0, 0), probeCounts - 1);
 }
 
-float GetBlendWeight(float3 posW)
+float GetBlendWeight(float3 posW, float3 volumePosition, float3 probeSpacing, int3 probeCounts)
 {
-    float3 deltaPosW = abs(posW - g_RaytracePerFrame.VolumePosition);
+    float3 deltaPosW = abs(posW - volumePosition) - (probeSpacing * (probeCounts - 1)) * 0.5f;
 
     if (all(deltaPosW < 0.0f))
     {
         return 1;
     }
 
-    return (1.0f - saturate(deltaPosW.x / g_RaytracePerFrame.ProbeSpacing.x)) * (1.0f - saturate(deltaPosW.x / g_RaytracePerFrame.ProbeSpacing.y)) * (1.0f - saturate(deltaPosW.x / g_RaytracePerFrame.ProbeSpacing.z));
-}
-
-float3 GetIrradiance(float3 posW, float3 surfaceBias, float3 normalW)
-{
-    float3 biasedPosW = posW + surfaceBias;
-    int3 closestProbeCoords = GetClosestProbeCoords(biasedPosW);
-    float3 closestProbeCoordsWorld = GetProbeCoordsWorld(closestProbeCoords);
-
-    float3 distanceRatio = clamp((biasedPosW - closestProbeCoordsWorld) / g_RaytracePerFrame.ProbeSpacing, float3(0, 0, 0), float3(1, 1, 1));
+    float weight = 1.0f;
+    weight *= (1.0f - saturate(deltaPosW.x / probeSpacing.x));
+    weight *= (1.0f - saturate(deltaPosW.y / probeSpacing.y));
+    weight *= (1.0f - saturate(deltaPosW.z / probeSpacing.z));
     
-    for (int i = 0; i < 8; ++i)
-    {
-        //Some bitwise magic to get all the different offsets
-        int3 probeOffset = int3(i, i >> 1, i >> 2) & int3(1, 1, 1);
-        int3 probeCoords = clamp(closestProbeCoords + probeOffset, int3(0, 0, 0), g_RaytracePerFrame.ProbeCounts - 1);
-        int probeIndex = GetProbeIndex(probeCoords);
-    }
-
-    return float3(0, 0, 0);
-
+    return weight;
 }
+
+float2 GetAtlasCoords(int probeIndex, float2 octCoords, int numTexels, int3 probeCounts)
+{
+    int gridSpaceX = (probeIndex % probeCounts.x);
+    int gridSpaceY = (probeIndex / probeCounts.x);
+
+    int x = gridSpaceX + int(probeIndex / (probeCounts.x * probeCounts.z)) * probeCounts.x;
+    int y = gridSpaceY % probeCounts.z;
+    
+    float2 uv = float2(x * (numTexels + 2), y * (numTexels + 2)) + ((numTexels + 2) * 0.5f);
+    uv += octCoords.xy * (numTexels * 0.5f);
+    uv /= float2((numTexels + 2) * (probeCounts.x * probeCounts.y), (numTexels + 2) * probeCounts.z);
+    
+    return uv;
+}
+
+float3 GetRayDirection(int rayIndex, int raysPerProbe, float4 rotationQuat)
+{
+    float3 direction = GetFibonacciSpiralDirection(rayIndex, raysPerProbe);
+    
+    return normalize(QuaternionRotate(direction, QuaternionConjugate(rotationQuat)));
+}
+
+float3 GetRayRadiance(uint2 texCoords, int rayDataFormat, Texture2D<float4> rayData)
+{
+    if (rayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
+    {
+        return rayData[texCoords].rgb;
+    }
+    else
+    {
+        return UintToFloat3(rayData[texCoords].r);
+    }
+}
+
+float GetRayDistance(uint2 texCoords, int rayDataFormat, Texture2D<float4> rayData)
+{
+    if (rayDataFormat == FORMAT_PROBE_RAY_DATA_R32G32B32A32_FLOAT)
+    {
+        return rayData[texCoords].a;
+    }
+    else
+    {
+        return rayData[texCoords].g;
+    }
+}
+
+#endif

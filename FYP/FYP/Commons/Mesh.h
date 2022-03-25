@@ -18,7 +18,8 @@ enum class PrimitiveAttributes : UINT8
 	NORMAL = 1,
 	OCCLUSION = 2,
 	METALLIC_ROUGHNESS = 4,
-	EMISSIVE = 8
+	EMISSIVE = 8,
+	ALBEDO = 16
 };
 
 DEFINE_ENUM_FLAG_OPERATORS(PrimitiveAttributes);
@@ -113,6 +114,8 @@ struct Primitive
 	int m_iNormalIndex;
 	int m_iMetallicRoughnessIndex;
 	int m_iOcclusionIndex;
+
+	DirectX::XMFLOAT4 m_BaseColour;
 
 	PrimitiveAttributes m_Attributes = (PrimitiveAttributes)0;
 

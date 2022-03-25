@@ -5,6 +5,8 @@
 #include <utility>
 #include <string>
 #include <unordered_map>
+#include <wrl.h>
+#include "Include/DirectX/d3dx12.h"
 
 enum class LogLevel
 {
@@ -13,12 +15,34 @@ enum class LogLevel
 	ERROR_LOG
 };
 
-#define PROFILE_TIMERS 0
+enum class GpuStats
+{
+	FULL_FRAME = 0,
+	DRAW_VOLUME,
+	TRACE_RAYS,
+	BLEND_PROBES,
+	ATLAS_BLEND_PROBES,
+	BORDER_BLEND_PROBES,
+	DEFERRED_PASS,
+	GBUFFER,
+	LIGHT,
+
+	COUNT
+};
+
+#define PROFILE_TIMERS 1
 
 #if _DEBUG || PROFILE_TIMERS
 #define PROFILE(name) ScopedTimer profileTimer = ScopedTimer(name);
+
+#define GPU_PROFILE_BEGIN(index, pGraphicsCommandList) pGraphicsCommandList->EndQuery(DebugHelper::GetQueryHeap(), D3D12_QUERY_TYPE_TIMESTAMP, (int)index * 2);
+#define GPU_PROFILE_END(index, pGraphicsCommandList) pGraphicsCommandList->EndQuery(DebugHelper::GetQueryHeap(), D3D12_QUERY_TYPE_TIMESTAMP, ((int)index * 2) + 1);
+
 #else
 #define PROFILE(name)
+
+#define GPU_PROFILE_BEGIN(index, pGraphicsCommandList)
+#define GPU_PROFILE_END(index, pGraphicsCommandList)
 #endif
 
 #if _DEBUG
@@ -63,9 +87,28 @@ public:
 
 	static void ShowUI();
 
+	static void Init(ID3D12Device* pDevice, ID3D12CommandQueue* pQueue);
+
+	static void BeginFrame(ID3D12GraphicsCommandList* pGraphicsCommandList);
+	static void EndFrame(ID3D12GraphicsCommandList* pGraphicsCommandList);
+
+	static void ResolveTimestamps(ID3D12GraphicsCommandList* pGraphicsCommandList);
+	static void UpdateTimestamps();
+
+	static ID3D12QueryHeap* GetQueryHeap();
+
 protected:
 
 private:
-	static std::unordered_map<std::string, double> m_TimerTimes;
+	static std::unordered_map<std::string, double> s_TimerTimes;
+
+	static Microsoft::WRL::ComPtr<ID3D12QueryHeap> s_pQueryHeap;
+	static Microsoft::WRL::ComPtr<ID3D12Resource> s_pTimestampResource;
+
+	static std::vector<double> s_GpuStatTimes;
+
+	static UINT64 s_uiTimestampFrequency;
+
+	static std::vector<std::string> s_sGpuStatNames;
 };
 

@@ -34,9 +34,6 @@
     <Filter Include="Include\dxguids">
       <UniqueIdentifier>{b6bdc246-a44b-4ce1-9289-4b3b0744ef9c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Include\nv_helpers_dx12">
-      <UniqueIdentifier>{7de20d4e-433e-4280-90e7-fbf71e91231f}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Shaders">
       <UniqueIdentifier>{de1abc9d-be79-4781-b447-cfa9c92d4f16}</UniqueIdentifier>
     </Filter>
@@ -55,6 +52,9 @@
     <Filter Include="Include\ImGui">
       <UniqueIdentifier>{8217501e-0f00-4645-b728-76495725e6b4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Commons\Descriptors">
+      <UniqueIdentifier>{b53f5e17-54f8-4a08-8cf5-149520e4c4d5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -72,21 +72,6 @@
     </ClCompile>
     <ClCompile Include="Helpers\MathHelper.cpp">
       <Filter>Helpers</Filter>
-    </ClCompile>
-    <ClCompile Include="Include\nv_helpers_dx12\BottomLevelASGenerator.cpp">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClCompile>
-    <ClCompile Include="Include\nv_helpers_dx12\RaytracingPipelineGenerator.cpp">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClCompile>
-    <ClCompile Include="Include\nv_helpers_dx12\RootSignatureGenerator.cpp">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClCompile>
-    <ClCompile Include="Include\nv_helpers_dx12\ShaderBindingTableGenerator.cpp">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClCompile>
-    <ClCompile Include="Include\nv_helpers_dx12\TopLevelASGenerator.cpp">
-      <Filter>Include\nv_helpers_dx12</Filter>
     </ClCompile>
     <ClCompile Include="Helpers\DXRHelper.cpp">
       <Filter>Helpers</Filter>
@@ -118,25 +103,10 @@
     <ClCompile Include="Managers\TextureManager.cpp">
       <Filter>Managers</Filter>
     </ClCompile>
-    <ClCompile Include="Commons\Descriptor.cpp">
-      <Filter>Commons</Filter>
-    </ClCompile>
     <ClCompile Include="Commons\DescriptorHeap.cpp">
       <Filter>Commons</Filter>
     </ClCompile>
-    <ClCompile Include="Commons\UAVDescriptor.cpp">
-      <Filter>Commons</Filter>
-    </ClCompile>
-    <ClCompile Include="Commons\SRVDescriptor.cpp">
-      <Filter>Commons</Filter>
-    </ClCompile>
     <ClCompile Include="Commons\Mesh.cpp">
-      <Filter>Commons</Filter>
-    </ClCompile>
-    <ClCompile Include="Commons\RTVDescriptor.cpp">
-      <Filter>Commons</Filter>
-    </ClCompile>
-    <ClCompile Include="Commons\DSVDescriptor.cpp">
       <Filter>Commons</Filter>
     </ClCompile>
     <ClCompile Include="Include\ImGui\imgui.cpp">
@@ -161,9 +131,26 @@
       <Filter>Include\ImGui</Filter>
     </ClCompile>
     <ClCompile Include="GIVolume.cpp" />
-    <ClCompile Include="Commons\ScopedTimer.cpp" />
     <ClCompile Include="Helpers\ImGuiHelper.cpp">
       <Filter>Helpers</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\ScopedTimer.cpp">
+      <Filter>Commons</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\Descriptor.cpp">
+      <Filter>Commons\Descriptors</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\DSVDescriptor.cpp">
+      <Filter>Commons\Descriptors</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\RTVDescriptor.cpp">
+      <Filter>Commons\Descriptors</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\SRVDescriptor.cpp">
+      <Filter>Commons\Descriptors</Filter>
+    </ClCompile>
+    <ClCompile Include="Commons\UAVDescriptor.cpp">
+      <Filter>Commons\Descriptors</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -214,21 +201,6 @@
     </ClInclude>
     <ClInclude Include="Helpers\MathHelper.h">
       <Filter>Helpers</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\nv_helpers_dx12\BottomLevelASGenerator.h">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\nv_helpers_dx12\RaytracingPipelineGenerator.h">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\nv_helpers_dx12\RootSignatureGenerator.h">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\nv_helpers_dx12\ShaderBindingTableGenerator.h">
-      <Filter>Include\nv_helpers_dx12</Filter>
-    </ClInclude>
-    <ClInclude Include="Include\nv_helpers_dx12\TopLevelASGenerator.h">
-      <Filter>Include\nv_helpers_dx12</Filter>
     </ClInclude>
     <ClInclude Include="Helpers\DXRHelper.h">
       <Filter>Helpers</Filter>
@@ -293,25 +265,10 @@
     <ClInclude Include="Commons\DescriptorHeap.h">
       <Filter>Commons</Filter>
     </ClInclude>
-    <ClInclude Include="Commons\Descriptor.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
-    <ClInclude Include="Commons\UAVDescriptor.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
-    <ClInclude Include="Commons\SRVDescriptor.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
     <ClInclude Include="Commons\Mesh.h">
       <Filter>Commons</Filter>
     </ClInclude>
     <ClInclude Include="Commons\AccelerationBuffers.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
-    <ClInclude Include="Commons\RTVDescriptor.h">
-      <Filter>Commons</Filter>
-    </ClInclude>
-    <ClInclude Include="Commons\DSVDescriptor.h">
       <Filter>Commons</Filter>
     </ClInclude>
     <ClInclude Include="Include\ImGui\imconfig.h">
@@ -339,9 +296,26 @@
       <Filter>Include\ImGui</Filter>
     </ClInclude>
     <ClInclude Include="GIVolume.h" />
-    <ClInclude Include="Commons\ScopedTimer.h" />
     <ClInclude Include="Helpers\ImGuiHelper.h">
       <Filter>Helpers</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\ScopedTimer.h">
+      <Filter>Commons</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\Descriptor.h">
+      <Filter>Commons\Descriptors</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\DSVDescriptor.h">
+      <Filter>Commons\Descriptors</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\RTVDescriptor.h">
+      <Filter>Commons\Descriptors</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\SRVDescriptor.h">
+      <Filter>Commons\Descriptors</Filter>
+    </ClInclude>
+    <ClInclude Include="Commons\UAVDescriptor.h">
+      <Filter>Commons\Descriptors</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -358,8 +332,17 @@
     <None Include="Shaders\RasterCommons.hlsli">
       <Filter>Shaders\Raster</Filter>
     </None>
-    <None Include="Shaders\LightingHelper.hlsli">
+    <None Include="Shaders\Payloads.hlsli">
       <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Defines.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\Samplers.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\LightingHelper.hlsli">
+      <Filter>Shaders\Raster</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -384,11 +367,26 @@
     <FxCompile Include="Shaders\LightVertex.hlsl">
       <Filter>Shaders\Raster</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\ProbeHelper.hlsl">
-      <Filter>Shaders\Raytracing</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\RaytracedLightingHelper.hlsl">
       <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Octahedral.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\MathHelper.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\Irradiance.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ProbeBlendingCompute.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ProbeBorderBlendingCompute.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ProbeHelper.hlsl">
+      <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>

@@ -32,13 +32,18 @@ PS_OUTPUT main(PS_INPUT input)
 #endif
     
     output.NormalW.xyz = (normalW + 1) * 0.5f;
-    output.Albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamPointWrap, input.TexCoords, 0);
     
-#if !NO_METALLIC_ROUGHNESS
+#if ALBEDO
+    output.Albedo = Tex2DTable[geomInfo.AlbedoIndex].SampleLevel(SamPointWrap, input.TexCoords, 0);
+#else
+    output.Albedo = float4(g_PrimitivePerInstanceCB[g_ScenePerFrameCB.PrimitivePerInstanceIndex][l_PrimitiveIndexCB.PrimitiveIndex].AlbedoColor.xyz, 1.0f);
+#endif
+    
+#if METALLIC_ROUGHNESS
     output.MetallicRoughnessOcclusion.xy = Tex2DTable[geomInfo.MetallicRoughnessIndex].SampleLevel(SamPointWrap, input.TexCoords, 0).bg;
 #else
-    output.MetallicRoughnessOcclusion.x = 0.5f;
-    output.MetallicRoughnessOcclusion.y = 0.5f;
+    output.MetallicRoughnessOcclusion.x = 0;
+    output.MetallicRoughnessOcclusion.y = 1;
 #endif
     
 #if OCCLUSION_MAPPING

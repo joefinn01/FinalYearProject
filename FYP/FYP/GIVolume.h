@@ -8,6 +8,7 @@
 #include <DirectXMath.h>
 #include <vector>
 #include <unordered_map>
+#include <random>
 
 struct IDxcBlob;
 
@@ -43,14 +44,36 @@ namespace RaytracingPass
 		};
 	}
 
-	namespace LocalRootSignatureParams {
+	namespace LocalRootSignatureParams 
+	{
 		enum Value
 		{
 			INDEX = 0,
 			COUNT
 		};
 	}
+
+	namespace ProbeBlendingRootSignatureParams 
+	{
+		enum Value
+		{
+			RAY_DATA = 0,
+			TEXTURE_ATLAS,
+			STANDARD_DESCRIPTORS,
+			PER_FRAME_SCENE_CB,
+			PER_FRAME_RAYTRACE_CB,
+			COUNT
+		};
+	}
 }
+
+enum class ClosestHitShaderVariants
+{
+	ALBEDO = 0,
+	NONE,
+
+	COUNT
+};
 
 class GIVolume
 {
@@ -70,6 +93,8 @@ public:
 	const float& GetProbeScale () const;
 
 	const DirectX::XMINT3& GetProbeCounts() const;
+
+	UploadBuffer<RaytracePerFrameCB>* GetRaytracePerFrameUpload();
 
 	const bool& IsRelocating() const;
 	const bool& IsTracking() const;
@@ -121,11 +146,15 @@ private:
 	bool CreateAccelerationStructures();
 	bool CreateTLAS(bool bUpdate);
 
+	bool CreatePSOs();
+
 	bool CompileShaders();
 
 	void CreateConstantBuffers();
 
 	void UpdateConstantBuffers();
+
+	void UpdateRandomRotation();
 
 	DXGI_FORMAT GetRayDataFormat();
 	DXGI_FORMAT GetIrradianceFormat();
@@ -135,6 +164,10 @@ private:
 	void AssociateShader(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc);
 
 	void CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc, D3D12_HIT_GROUP_TYPE hitGroupType = D3D12_HIT_GROUP_TYPE_TRIANGLES);
+
+	void PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	void BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	void DrawIndirect(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
 
 	UINT m_uiMissRecordSize;
 	UINT m_uiHitGroupRecordSize;
@@ -147,11 +180,11 @@ private:
 
 	DirectX::XMFLOAT3 m_Position = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeTrackingTarget = DirectX::XMFLOAT3();
-	DirectX::XMFLOAT3 m_ProbeSpacing = DirectX::XMFLOAT3();
-	float m_ProbeScale = 1.0f;
-	DirectX::XMINT3 m_ProbeCounts = DirectX::XMINT3(5, 5, 5);
-	int m_iIrradianceTexelsPerProbe = 10;
-	int m_iDistanceTexelsPerProbe = 10;
+	DirectX::XMFLOAT3 m_ProbeSpacing = DirectX::XMFLOAT3(0.3f, 0.3f, 0.3f);
+	float m_ProbeScale = 0.05f;
+	DirectX::XMINT3 m_ProbeCounts = DirectX::XMINT3(9, 9, 9);
+	int m_iIrradianceTexelsPerProbe = 6;
+	int m_iDistanceTexelsPerProbe = 14;
 	
 	AtlasSize m_AtlasSize = AtlasSize::BIGGER;
 
@@ -167,14 +200,40 @@ private:
 
 	LPCWSTR m_kwsRayGenName = L"RayGen";
 	LPCWSTR m_kwsMissName = L"Miss";
-	LPCWSTR m_ClosestHitName = L"ClosestHit";
-	LPCWSTR m_HitGroupName = L"HitGroup";
+
+	LPCWSTR m_ClosestHitNames[(int)ClosestHitShaderVariants::COUNT] = 
+	{
+		L"ClosestHitAlbedo",
+		L"ClosestHit",
+	};
+
+	LPCWSTR m_HitGroupNames[(int)ClosestHitShaderVariants::COUNT] = 
+	{
+		L"HitGroupAlbedo",
+		L"HitGroup",
+	};
+
+	LPCWSTR m_IrradianceProbeBlendingName = L"IrradianceProbeBlendingCompute";
+	LPCWSTR m_IrradianceRowProbeBlendingName = L"IrradianceRowProbeBlendingCompute";
+	LPCWSTR m_IrradianceColumnProbeBlendingName = L"IrradianceColumnProbeBlendingCompute";
+	LPCWSTR m_DistanceProbeBlendingName = L"DistanceProbeBlendingCompute";
+	LPCWSTR m_DistanceRowProbeBlendingName = L"DistanceRowProbeBlendingCompute";
+	LPCWSTR m_DistanceColumnProbeBlendingName = L"DistanceColumnProbeBlendingCompute";
 
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pGlobalRootSignature;
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pLocalRootSignature;
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_pProbeBlendingRootSignature;
 
 	Microsoft::WRL::ComPtr<ID3D12StateObject> m_pStateObject;
 	Microsoft::WRL::ComPtr<ID3D12StateObjectProperties> m_pStateObjectProps;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pIrradianceBlendPSO;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pIrradianceRowBlendPSO;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pIrradianceColumnBlendPSO;
+
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pDistanceBlendPSO;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pDistanceRowBlendPSO;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pDistanceColumnBlendPSO;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pMissTable;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pHitGroupTable;
@@ -184,9 +243,19 @@ private:
 
 	AccelerationBuffers m_TopLevelBuffer;
 
-	float m_fMaxRayDistance = 1000.0f;
+	float m_fMaxRayDistance = 10.0f;
 	float m_fViewBias = 0.1f;
-	float m_fNormalBias = 0.1f;
-	int m_iRaysPerProbe = 144;
+	float m_fNormalBias = 0.02f;
+	int m_iRaysPerProbe = 288;
+	float m_fBrightnessThreshold = 1.0f;
+	float m_fDistancePower = 50.0f;
+	float m_fHysteresis = 0.97f;
+	int m_iIrradianceFormat = 1;
+	float m_fIrradianceGammaEncoding = 5.0f;
+	float m_fIrradianceThreshold = 0.2f;
+
+	DirectX::XMFLOAT4 m_RayRotation = DirectX::XMFLOAT4(0, 0, 0, 1);
+
+	std::mt19937 m_rng;
 };
 

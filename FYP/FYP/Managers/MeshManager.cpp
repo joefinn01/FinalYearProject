@@ -276,11 +276,18 @@ bool MeshManager::ProcessNode(MeshNode* pParentNode, const tinygltf::Node& kNode
 			pPrimitive->m_uiFirstVertex = uiVertexStart;
 			pPrimitive->m_uiNumIndices = uiIndexCount;
 			pPrimitive->m_uiNumVertices = uiVertexCount;
+			const std::vector<double>& baseColor = kModel.materials[kPrimitive.material].pbrMetallicRoughness.baseColorFactor;
+			pPrimitive->m_BaseColour = DirectX::XMFLOAT4(baseColor[0], baseColor[1], baseColor[2], baseColor[3]);
 			pPrimitive->m_iAlbedoIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.baseColorTexture.index;
 			pPrimitive->m_iNormalIndex = kModel.materials[kPrimitive.material].normalTexture.index;
 			pPrimitive->m_iMetallicRoughnessIndex = kModel.materials[kPrimitive.material].pbrMetallicRoughness.metallicRoughnessTexture.index;
 			pPrimitive->m_iOcclusionIndex = kModel.materials[kPrimitive.material].occlusionTexture.index;
 			pPrimitive->m_iIndex = m_uiNumPrimitives - kMesh.primitives.size() + i;
+
+			if (pPrimitive->m_iAlbedoIndex != -1)
+			{
+				pPrimitive->m_Attributes = pPrimitive->m_Attributes | PrimitiveAttributes::ALBEDO;
+			}
 
 			if (pPrimitive->m_iOcclusionIndex != -1)
 			{
