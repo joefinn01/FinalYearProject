@@ -155,6 +155,7 @@ private:
 	void UpdateConstantBuffers();
 
 	void UpdateRandomRotation();
+	void UpdateVolumeOffsets();
 
 	DXGI_FORMAT GetRayDataFormat();
 	DXGI_FORMAT GetIrradianceFormat();
@@ -167,7 +168,8 @@ private:
 
 	void PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
 	void BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
-	void DrawIndirect(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
+
+	void Offset(float& pos, int& probeOffset, int probeCount, float probeSpacing, int direction);
 
 	UINT m_uiMissRecordSize;
 	UINT m_uiHitGroupRecordSize;
@@ -254,10 +256,12 @@ private:
 	float m_fIrradianceGammaEncoding = 5.0f;
 	float m_fIrradianceThreshold = 0.2f;
 	DirectX::XMFLOAT3 m_MissRadiance = DirectX::XMFLOAT3(0, 0, 0);
-	DirectX::XMINT3 m_ProbeScrolling = DirectX::XMINT3(0, 0, 0);
+	DirectX::XMINT3 m_ProbeOffsets = DirectX::XMINT3(0, 0, 0);
 	DirectX::XMINT3 m_ClearPlanes = DirectX::XMINT3(0, 0, 0);
 
 	DirectX::XMFLOAT4 m_RayRotation = DirectX::XMFLOAT4(0, 0, 0, 1);
+
+	DirectX::XMFLOAT3 m_Anchor = DirectX::XMFLOAT3(0, 0, 0);
 
 	std::mt19937 m_rng;
 };

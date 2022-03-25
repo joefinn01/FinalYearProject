@@ -128,6 +128,8 @@ void GIVolume::Update(const Timer& kTimer)
 {
 	UpdateRandomRotation();
 
+	UpdateVolumeOffsets();
+
 	UpdateConstantBuffers();
 }
 
@@ -143,7 +145,6 @@ void GIVolume::Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pSc
 
 	PopulateRayData(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
 	BlendProbeAtlases(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
-	DrawIndirect(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
 
 	PIX_ONLY(PIXEndEvent());
 	GPU_PROFILE_END(GpuStats::DRAW_VOLUME, pGraphicsCommandList)
@@ -1104,7 +1105,7 @@ void GIVolume::UpdateConstantBuffers()
 	raytracePerFrame.ViewBias = m_fViewBias;
 	raytracePerFrame.RaysPerProbe = m_iRaysPerProbe;
 	raytracePerFrame.VolumePosition = m_Position;
-	raytracePerFrame.ProbeOffsets = m_ProbeScrolling;
+	raytracePerFrame.ProbeOffsets = m_ProbeOffsets;
 	raytracePerFrame.ClearPlane = m_ClearPlanes;
 	
 	m_pRaytracedPerFrameUpload->CopyData(0, raytracePerFrame);
@@ -1150,6 +1151,89 @@ void GIVolume::UpdateRandomRotation()
 	DirectX::XMFLOAT3X3 transform(_11, _12, _13, _21, _22, _23, _31, _32, _33);
 
 	XMStoreFloat4(&m_RayRotation, XMQuaternionNormalize(XMQuaternionRotationMatrix(XMLoadFloat3x3(&transform))));
+}
+
+void GIVolume::UpdateVolumeOffsets()
+{
+	m_ClearPlanes.x = false;
+	m_ClearPlanes.y = false;
+	m_ClearPlanes.z = false;
+
+	DirectX::XMFLOAT3 offsettedPos = DirectX::XMFLOAT3(m_Position.x + m_ProbeSpacing.x * m_ProbeOffsets.x, m_Position.y + m_ProbeSpacing.y * m_ProbeOffsets.y, m_Position.z + m_ProbeSpacing.z * m_ProbeOffsets.z);
+
+	DirectX::XMFLOAT3 toAnchor;
+	XMStoreFloat3(&toAnchor, XMVectorSubtract(XMLoadFloat3(&m_Anchor), XMLoadFloat3(&offsettedPos)));
+
+	DirectX::XMINT3 toAnchorSigns = { 1, 1, 1 };
+
+	if (toAnchor.x < 0)
+	{
+		toAnchorSigns.x = -1;
+	}
+	if (toAnchor.y < 0)
+	{
+		toAnchorSigns.y = -1;
+	}
+	if (toAnchor.z < 0)
+	{
+		toAnchorSigns.z = -1;
+	}
+
+	DirectX::XMINT3 shouldScroll;
+
+	float val = toAnchor.x / m_ProbeSpacing.x;
+	if (val >= 0.0f)
+	{
+		shouldScroll.x = floor(val);
+	}
+	else
+	{
+		shouldScroll.x = ceil(val);
+	}
+
+	val = toAnchor.y / m_ProbeSpacing.y;
+	if (val >= 0.0f)
+	{
+		shouldScroll.y = floor(val);
+	}
+	else
+	{
+		shouldScroll.y = ceil(val);
+	}
+
+	val = toAnchor.z / m_ProbeSpacing.z;
+	if (val >= 0.0f)
+	{
+		shouldScroll.z = floor(val);
+	}
+	else
+	{
+		shouldScroll.z = ceil(val);
+	}
+
+	if (shouldScroll.x != 0)
+	{
+		m_ProbeOffsets.x += shouldScroll.x;
+		m_ClearPlanes.x = true;
+
+		Offset(m_Position.x, m_ProbeOffsets.x, m_ProbeCounts.x, m_ProbeSpacing.x, toAnchorSigns.x);
+	}
+
+	if (shouldScroll.y != 0)
+	{
+		m_ProbeOffsets.y += shouldScroll.y;
+		m_ClearPlanes.y = true;
+
+		Offset(m_Position.y, m_ProbeOffsets.y, m_ProbeCounts.y, m_ProbeSpacing.y, toAnchorSigns.y);
+	}
+
+	if (shouldScroll.z != 0)
+	{
+		m_ProbeOffsets.z += shouldScroll.z;
+		m_ClearPlanes.z = true;
+
+		Offset(m_Position.z, m_ProbeOffsets.z, m_ProbeCounts.z, m_ProbeSpacing.z, toAnchorSigns.z);
+	}
 }
 
 DXGI_FORMAT GIVolume::GetRayDataFormat()
@@ -1265,6 +1349,15 @@ void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFr
 	GPU_PROFILE_END(GpuStats::TRACE_RAYS, pGraphicsCommandList)
 }
 
+void GIVolume::Offset(float& pos, int& probeOffset, int probeCount, float probeSpacing, int direction)
+{
+	if (probeOffset != 0 && probeOffset % probeCount == 0)
+	{
+		pos += probeCount * direction * probeSpacing;
+		probeOffset = 0;
+	}
+}
+
 void GIVolume::BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
 {
 	GPU_PROFILE_BEGIN(GpuStats::BLEND_PROBES, pGraphicsCommandList)
@@ -1370,11 +1463,4 @@ void GIVolume::BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePer
 
 	PIX_ONLY(PIXEndEvent());
 	GPU_PROFILE_END(GpuStats::BLEND_PROBES, pGraphicsCommandList)
-}
-
-void GIVolume::DrawIndirect(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
-{
-	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Draw indirect light"));
-
-	PIX_ONLY(PIXEndEvent());
 }
