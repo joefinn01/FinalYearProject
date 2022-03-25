@@ -63,19 +63,21 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     float4 color = float4((float3(0.03f, 0.03f, 0.03f) * fMetallicRoughnessOcclusion.b * albedo) + outgoingRadiance, 1.0f);
     
+#if USE_GI
     float blendWeight = GetBlendWeight(hitPosW.xyz, l_RaytracePerFrameCB.VolumePosition, l_RaytracePerFrameCB.ProbeSpacing, l_RaytracePerFrameCB.ProbeCounts);
     float3 surfaceBias = GetSurfaceBias(normalW, -viewW, l_RaytracePerFrameCB.NormalBias, l_RaytracePerFrameCB.ViewBias);
     float4 indirectLight = GetIrradiance(hitPosW.xyz, surfaceBias, normalW, l_RaytracePerFrameCB);
     
     if (blendWeight > 0.0f)
     {
-#if !SHOW_INDIRECT
+#if SHOW_INDIRECT
         color.rgb = (albedo.rgb * indirectLight.rgb * blendWeight) / PI;
 #else
         color.rgb += (albedo.rgb * indirectLight.rgb * blendWeight) / PI;
 #endif
     }
-    
+#endif    
+
     //Map and gamma correct
     float fMapping = 1.0f / 2.2f;
     

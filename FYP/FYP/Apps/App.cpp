@@ -666,7 +666,21 @@ void App::DrawLightPass()
 	GPU_PROFILE_BEGIN(GpuStats::LIGHT, m_pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "Light Pass"));
 
-	m_pGraphicsCommandList->SetPipelineState(m_pLightPSO.Get());
+	if (m_bUseGI == true)
+	{
+		if (m_bShowIndirect == true)
+		{
+			m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT].Get());
+		}
+		else
+		{
+			m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::USE_GI].Get());
+		}
+	}
+	else
+	{
+		m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::DIRECT].Get());
+	}
 
 	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pLightRootSignature.Get());
 
@@ -1227,16 +1241,20 @@ bool App::CreateLightPSO()
 	psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 	psoDesc.VS.BytecodeLength = m_Shaders[m_wsLightVertexName].Get()->GetBufferSize();
 	psoDesc.VS.pShaderBytecode = m_Shaders[m_wsLightVertexName].Get()->GetBufferPointer();
-	psoDesc.PS.BytecodeLength = m_Shaders[m_wsLightPixelName]->GetBufferSize();
-	psoDesc.PS.pShaderBytecode = m_Shaders[m_wsLightPixelName]->GetBufferPointer();
-
-	HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPSO.GetAddressOf()));
-
-	if (FAILED(hr))
+	
+	for (int i = 0; i < (int)DeferredPass::LightPass::ShaderVersions::COUNT; ++i)
 	{
-		LOG_ERROR(tag, L"Failed to create light pass pipeline state object!");
+		psoDesc.PS.BytecodeLength = m_Shaders[m_wsLightPixelNames[i]]->GetBufferSize();
+		psoDesc.PS.pShaderBytecode = m_Shaders[m_wsLightPixelNames[i]]->GetBufferPointer();
 
-		return false;
+		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPSOs[i].GetAddressOf()));
+
+		if (FAILED(hr))
+		{
+			LOG_ERROR(tag, L"Failed to create light pass pipeline state object!");
+
+			return false;
+		}
 	}
 
 	return true;
@@ -1280,7 +1298,7 @@ bool App::CompileShaders()
 {
 	ComPtr<IDxcBlob> pBlob;
 
-	//Create different preprocessor define configs.
+	//G Buffer pass defines
 	LPCWSTR albedo[] =
 	{
 		L"ALBEDO=1",
@@ -1323,6 +1341,18 @@ bool App::CompileShaders()
 		L"ALBEDO=1",
 	};
 
+	//Light pass defines
+	LPCWSTR useGI[] =
+	{
+		L"USE_GI=1",
+	};
+
+	LPCWSTR showIndirect[] =
+	{
+		L"USE_GI=1",
+		L"SHOW_INDIRECT=1"
+	};
+
 	//Create array of shaders to compile
 	CompileRecord records[] =
 	{
@@ -1336,10 +1366,11 @@ bool App::CompileShaders()
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::METALLIC_ROUGHNESS], L"ps_6_3", L"main", metallicRoughness, (int)_countof(metallicRoughness)),	//No metallic roughness or anything else
 		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::ALBEDO], L"ps_6_3", L"main", albedo, (int)_countof(albedo)),	//Just albedo
 
-
 		//Light pass shaders
 		CompileRecord(L"Shaders/LightVertex.hlsl", m_wsLightVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelName, L"ps_6_3", L"main"),	//Pixel shader
+		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::DIRECT], L"ps_6_3", L"main"),	//Just direct light
+		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::USE_GI], L"ps_6_3", L"main", useGI, (int)_countof(useGI)),	//use global illumination
+		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT], L"ps_6_3", L"main", showIndirect, (int)_countof(showIndirect)),	//Show indirect light
 	};
 
 	for (int i = 0; i < _countof(records); ++i)
@@ -1653,9 +1684,20 @@ void App::DrawImGui()
 
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 
+	DebugHelper::ShowUI();
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	ImGui::Checkbox("Use GI", &m_bUseGI);
+
+	ImGui::Spacing();
+
+	ImGui::Checkbox("Show Indirect", &m_bShowIndirect);
+
 	m_pGIVolume->ShowUI();
 
-	DebugHelper::ShowUI();
 
 	ImGui::End();
 

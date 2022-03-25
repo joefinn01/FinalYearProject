@@ -89,6 +89,15 @@ namespace DeferredPass
 			PER_FRAME_RAYTRACE_CB,
 			COUNT
 		};
+
+		enum class ShaderVersions
+		{
+			DIRECT = 0,
+			USE_GI,
+			SHOW_INDIRECT,
+
+			COUNT
+		};
 	}
 }
 
@@ -300,7 +309,12 @@ protected:
 
 	//Light pass shader names
 	LPCWSTR m_wsLightVertexName = L"LightVertex";
-	LPCWSTR m_wsLightPixelName = L"LightPixel";
+	LPCWSTR m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::COUNT] =
+	{
+		L"LightPixelDirect",
+		L"LightPixelGI",
+		L"LightPixelShowIndirect",
+	};
 
 	//G Buffer pass shader names
 	LPCWSTR m_wsGBufferVertexName = L"GBufferVertex";
@@ -317,7 +331,7 @@ protected:
 
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::COUNT] = { };
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSO = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::COUNT] = {};
 
 	std::vector<D3D12_INPUT_ELEMENT_DESC> m_ScreenQuadInputDesc;
 	std::vector<D3D12_INPUT_ELEMENT_DESC> m_DefaultInputDesc;
