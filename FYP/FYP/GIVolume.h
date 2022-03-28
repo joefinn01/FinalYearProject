@@ -112,6 +112,8 @@ public:
 	void SetIsTracking(bool bIsTracking);
 	void SetIsShowingProbes(bool bIsShowingProbes);
 
+	void SetAnchorPosition(DirectX::XMFLOAT3 position);
+
 protected:
 
 private:

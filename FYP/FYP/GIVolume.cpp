@@ -58,7 +58,7 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 
 void GIVolume::ShowUI()
 {
-	if (ImGui::CollapsingHeader("GI Settings"))
+	if (ImGui::TreeNodeEx("GI Settings", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
 	{
 		if (ImGuiHelper::DragFloat3("Position", m_Position) == true)
 		{
@@ -117,10 +117,16 @@ void GIVolume::ShowUI()
 
 		ImGui::Spacing();
 
+		ImGuiHelper::Checkbox("Probe Tracking", m_bProbeTracking, 150.0f);
+
+		ImGui::Spacing();
+
 		if (ImGuiHelper::Checkbox("Show Probes", m_bShowProbes, 150.0f) == true)
 		{
 			ToggleProbeVisibility();
 		}
+
+		ImGui::TreePop();
 	}
 }
 
@@ -128,7 +134,10 @@ void GIVolume::Update(const Timer& kTimer)
 {
 	UpdateRandomRotation();
 
-	UpdateVolumeOffsets();
+	if (m_bProbeTracking == true)
+	{
+		UpdateVolumeOffsets();
+	}
 
 	UpdateConstantBuffers();
 }
@@ -241,6 +250,11 @@ void GIVolume::SetIsShowingProbes(bool bIsShowingProbes)
 	m_bShowProbes = bIsShowingProbes;
 }
 
+void GIVolume::SetAnchorPosition(DirectX::XMFLOAT3 position)
+{
+	m_Anchor = position;
+}
+
 void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 {
 	App::GetApp()->ResetCommandList();
@@ -290,7 +304,7 @@ void GIVolume::UpdateProbePositions()
 		{
 			for (int k = 0; k < m_ProbeCounts.z; ++k)
 			{
-				offset = XMFLOAT3((i * m_ProbeSpacing.x) - totalDimensions.x * 0.5f, (j * m_ProbeSpacing.y) - totalDimensions.y * 0.5f, (k * m_ProbeSpacing.z) - totalDimensions.z * 0.5f);
+				offset = XMFLOAT3(((i + m_ProbeOffsets.x) * m_ProbeSpacing.x) - totalDimensions.x * 0.5f, ((j + m_ProbeOffsets.y) * m_ProbeSpacing.y) - totalDimensions.y * 0.5f, ((k + m_ProbeOffsets.z) * m_ProbeSpacing.z) - totalDimensions.z * 0.5f);
 
 				m_ProbeGameObjects[i + m_ProbeCounts.x * (j + m_ProbeCounts.z * k)]->SetPosition(XMFLOAT3(m_Position.x + offset.x, m_Position.y + offset.y, m_Position.z + offset.z));
 			}
@@ -1233,6 +1247,11 @@ void GIVolume::UpdateVolumeOffsets()
 		m_ClearPlanes.z = true;
 
 		Offset(m_Position.z, m_ProbeOffsets.z, m_ProbeCounts.z, m_ProbeSpacing.z, toAnchorSigns.z);
+	}
+
+	if (m_ClearPlanes.x == true || m_ClearPlanes.y == true || m_ClearPlanes.z == true)
+	{
+		UpdateProbePositions();
 	}
 }
 

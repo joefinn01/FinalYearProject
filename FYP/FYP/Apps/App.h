@@ -22,6 +22,7 @@ class DescriptorHeap;
 class Descriptor;
 class Texture;
 class GIVolume;
+class GameObject;
 
 struct RayGenerationCB;
 struct Vertex;
@@ -368,6 +369,8 @@ protected:
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferGPU = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;
+
+	GameObject* m_pLight = nullptr;
 
 	GIVolume* m_pGIVolume = nullptr;
 

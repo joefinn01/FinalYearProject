@@ -13,6 +13,7 @@
 #include "Helpers/DebugHelper.h"
 #include "Helpers/MathHelper.h"
 #include "Helpers/DXRHelper.h"
+#include "Helpers/ImGuiHelper.h"
 #include "Managers/WindowManager.h"
 #include "Managers/InputManager.h"
 #include "Managers/ObjectManager.h"
@@ -261,6 +262,8 @@ void App::Update(const Timer& kTimer)
 	UpdatePerFrameCB(m_uiFrameIndex);
 
 	ObjectManager::GetInstance()->Update(kTimer);
+
+	m_pGIVolume->SetAnchorPosition(ObjectManager::GetInstance()->GetActiveCamera()->GetPosition());
 
 	m_pGIVolume->Update(kTimer);
 
@@ -1400,6 +1403,8 @@ void App::CreateGeometry()
 	}
 
 	MeshManager::GetInstance()->LoadMesh("Models/Cornell/Cornell.gltf", "Cornell", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Sphere/gLTF/Sphere.gltf", "Sphere", m_pGraphicsCommandList.Get());
+	//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -1571,7 +1576,7 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 0, 5), XMFLOAT3(0, 0, -1), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 1, 0), XMFLOAT3(0, 0, -1), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
 
 	ObjectManager::GetInstance()->AddCamera(pCamera);
 
@@ -1606,6 +1611,7 @@ void App::InitScene()
 {
 	Mesh* pMesh = nullptr;
 	MeshManager::GetInstance()->GetMesh("Cornell", pMesh);
+	//MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
 
 	GameObject* pGameObject = new GameObject();
 	pGameObject->Init("Cornell", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
@@ -1617,6 +1623,11 @@ void App::InitScene()
 	volumeDesc.ProbeScale = 0.1f;
 	volumeDesc.ProbeSpacing = XMFLOAT3(0.3f, 0.3f, 0.3f);
 	volumeDesc.ProbeTracking = false;
+
+	MeshManager::GetInstance()->GetMesh("Sphere", pMesh);
+
+	m_pLight = new GameObject();
+	m_pLight->Init("Light", DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), XMFLOAT3(0.1f, 0.1f, 0.1f), pMesh, true, false);
 
 	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
 
@@ -1632,10 +1643,11 @@ void App::InitConstantBuffers()
 		UpdatePerFrameCB(i);
 	}
 
-	//m_LightCBs[0].Color = XMFLOAT4(1, 0, 0, 1);
 	m_LightCBs[0].Color = XMFLOAT4(1, 1, 1, 1);
 	m_LightCBs[0].Position = XMFLOAT3(0, 2.0f, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+
+	m_pLight->SetPosition(m_LightCBs[0].Position);
 
 	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
 	m_LightCBs[1].Position = XMFLOAT3(10, 0, 0);
@@ -1690,13 +1702,33 @@ void App::DrawImGui()
 
 	DebugHelper::ShowUI();
 
-	if (ImGui::CollapsingHeader("Toggle GI"))
+	if (ImGui::TreeNodeEx("Light", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
+	{
+		if (ImGuiHelper::DragFloat3("Position", m_LightCBs[0].Position))
+		{
+			m_pLight->SetPosition(m_LightCBs[0].Position);
+		}
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat4("Colour", m_LightCBs[0].Color);
+
+		ImGui::Spacing();
+
+		ImGuiHelper::DragFloat3("Attenuation", m_LightCBs[0].Attenuation);
+
+		ImGui::TreePop();
+	}
+
+	if (ImGui::TreeNodeEx("Toggle GI", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
 	{
 		ImGui::Checkbox("Use GI", &m_bUseGI);
 
 		ImGui::Spacing();
 
 		ImGui::Checkbox("Show Indirect", &m_bShowIndirect);
+
+		ImGui::TreePop();
 	}
 
 	m_pGIVolume->ShowUI();
@@ -1775,6 +1807,8 @@ void App::UpdatePerFrameCB(UINT uiFrameIndex)
 	}
 
 	GetPrimitiveUploadBuffer(uiFrameIndex)->CopyData(0, m_GameObjectPerFrameCBs);
+
+	GetLightUploadBuffer(uiFrameIndex)->CopyData(0, m_LightCBs);
 }
 
 void App::LogAdapters()

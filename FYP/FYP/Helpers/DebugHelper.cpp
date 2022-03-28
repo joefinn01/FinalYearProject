@@ -100,7 +100,7 @@ std::unordered_map<std::string, double>* DebugHelper::GetFrameTimes()
 
 void DebugHelper::ShowUI()
 {
-	if (ImGui::CollapsingHeader("Profile Information"))
+	if (ImGui::TreeNodeEx("Profile Information", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
 	{
 		if (ImGui::TreeNode("CPU Times (ms)"))
 		{
@@ -125,6 +125,8 @@ void DebugHelper::ShowUI()
 
 			ImGui::TreePop();
 		}
+
+		ImGui::TreePop();
 	}
 }
 
