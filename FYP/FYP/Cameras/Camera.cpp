@@ -12,7 +12,7 @@ Camera::Camera(DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 at, DirectX::XMFLOA
 
 	m_sName = sName;
 
-	XMStoreFloat3(&m_Forward, XMLoadFloat3(&m_At) - XMLoadFloat3(&m_Eye));
+	XMStoreFloat3(&m_Forward, XMVector3Normalize(XMLoadFloat3(&m_At) - XMLoadFloat3(&m_Eye)));
 
 	XMStoreFloat4x4(&m_View, XMMatrixLookToLH(XMLoadFloat3(&m_Eye), XMLoadFloat3(&m_Forward), XMLoadFloat3(&m_Up)));
 
