@@ -54,6 +54,74 @@ float CheckLightVisibility(Payload payload, float maxDistance, float3 lightVec)
     return packedPayload.HitDistance < 0.0f;
 }
 
+float3 CalculatePointLight(Payload payload, LightCB lightCB)
+{
+    float3 viewW = normalize(g_ScenePerFrameCB.EyePosW - payload.PosW);
+    float3 light = lightCB.Position - payload.PosW;
+        
+    //Cache distance so not done again when normalizing
+    float fDistance = length(light);
+        
+    if(fDistance > lightCB.Range)
+    {
+        return float3(0, 0, 0);
+    }
+    
+    float visibility = CheckLightVisibility(payload, fDistance - g_RaytracePerFrame.ViewBias, light);
+        
+    if (visibility <= 0.0f)
+    {
+        return float3(0, 0, 0);
+    }
+        
+    light /= fDistance;
+        
+    float3 halfVec = normalize(viewW + light);
+
+    float fAttenuation = min(1.0f / dot(lightCB.Attenuation[0], float3(1.0f, lightCB.Attenuation[1] * fDistance, lightCB.Attenuation[2] * fDistance * fDistance)), 1.0f);
+
+    float3 radiance = lightCB.Color * fAttenuation;
+
+    float3 refelctance0 = float3(0.04f, 0.04f, 0.04f);
+    float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
+    float fNDF = NormalDistribution(payload.ShadingNormalW, halfVec, payload.Roughness);
+    float fGeomDist = GeometryDistribution(payload.ShadingNormalW, viewW, light, payload.Roughness);
+
+    //Add 0.0001f to prevent divide by zero
+    float3 specular = (fNDF * fGeomDist * fresnel) / (4.0f * max(dot(payload.ShadingNormalW, viewW), 0.0f) * max(dot(payload.ShadingNormalW, light), 0.0f) + 0.0001f);
+    float3 fKD = (float3(1.0f, 1.0f, 1.0f) - fresnel) * (1.0f - payload.Metallic);
+    float fNormDotLight = max(dot(payload.ShadingNormalW, light), 0.0f);
+    
+    return ((fKD * payload.Albedo / PI) + specular) * radiance * fNormDotLight * lightCB.Power;
+}
+
+float3 CalculateDirectionalLight(Payload payload, LightCB lightCB)
+{
+    float3 viewW = normalize(g_ScenePerFrameCB.EyePosW - payload.PosW);
+    lightCB.Direction = normalize(lightCB.Direction);
+    
+    float visibility = CheckLightVisibility(payload, g_RaytracePerFrame.MaxRayDistance - g_RaytracePerFrame.ViewBias, -lightCB.Direction);
+        
+    if (visibility <= 0.0f)
+    {
+        return float3(0, 0, 0);
+    }
+        
+    float3 halfVec = normalize(viewW - lightCB.Direction);
+
+    float3 refelctance0 = float3(0.04f, 0.04f, 0.04f);
+    float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
+    float fNDF = NormalDistribution(payload.ShadingNormalW, halfVec, payload.Roughness);
+    float fGeomDist = GeometryDistribution(payload.ShadingNormalW, viewW, -lightCB.Direction, payload.Roughness);
+
+    //Add 0.0001f to prevent divide by zero
+    float3 specular = (fNDF * fGeomDist * fresnel) / (4.0f * max(dot(payload.ShadingNormalW, viewW), 0.0f) * max(dot(payload.ShadingNormalW, -lightCB.Direction), 0.0f) + 0.0001f);
+    float3 fKD = (float3(1.0f, 1.0f, 1.0f) - fresnel) * (1.0f - payload.Metallic);
+    float fNormDotLight = max(dot(payload.ShadingNormalW, -lightCB.Direction), 0.0f);
+    
+    return ((fKD * payload.Albedo / PI) + specular) * lightCB.Color * fNormDotLight * lightCB.Power;
+}
+
 float3 CalculateDirectLight(Payload payload)
 {
     float3 directLight = 0;
@@ -65,40 +133,22 @@ float3 CalculateDirectLight(Payload payload)
     
     for (int i = 0; i < g_ScenePerFrameCB.NumLights; ++i)
     {
-        float3 light = g_LightCB[g_ScenePerFrameCB.LightIndex][i].Position - payload.PosW;
+        LightCB lightCB = g_LightCB[g_ScenePerFrameCB.LightIndex][i];
         
-        //Cache distance so not done again when normalizing
-        float fDistance = length(light);
-        
-        float visibility = CheckLightVisibility(payload, fDistance - g_RaytracePerFrame.ViewBias, light);
-        
-        if (visibility <= 0.0f)
+        if(lightCB.Enabled == 0)
         {
             continue;
         }
         
-        light /= fDistance;
-        
-        float3 halfVec = normalize(viewW + light);
-
-        float fAttenuation = min(1.0f / dot(g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[0], float3(1.0f, g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[1] * fDistance, g_LightCB[g_ScenePerFrameCB.LightIndex][i].Attenuation[2] * fDistance * fDistance)), 1.0f);
-
-        float3 radiance = g_LightCB[g_ScenePerFrameCB.LightIndex][i].Color.xyz * fAttenuation;
-
-        float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
-        float fNDF = NormalDistribution(payload.ShadingNormalW, halfVec, payload.Roughness);
-        float fGeomDist = GeometryDistribution(payload.ShadingNormalW, viewW, light, payload.Roughness);
-
-        //Add 0.0001f to prevent divide by zero
-        float3 specular = (fNDF * fGeomDist * fresnel) / (4.0f * max(dot(payload.ShadingNormalW, viewW), 0.0f) * max(dot(payload.ShadingNormalW, light), 0.0f) + 0.0001f);
-        
-        float3 fKD = (float3(1.0f, 1.0f, 1.0f) - fresnel) * (1.0f - payload.Metallic);
-        
-        float fNormDotLight = max(dot(payload.ShadingNormalW, light), 0.0f);
-        directLight += ((fKD * payload.Albedo / PI) + specular) * radiance * fNormDotLight;
+        if (lightCB.Type == DIRECTIONAL_LIGHT)
+        {
+            directLight += CalculateDirectionalLight(payload, lightCB);
+        }
+        else if (lightCB.Type == POINT_LIGHT)
+        {
+            directLight += CalculatePointLight(payload, lightCB);
+        }
     }
-
-    directLight = (float3(0.03f, 0.03f, 0.03f) * payload.Occlusion * payload.Albedo) + directLight;
     
     return directLight;
 }

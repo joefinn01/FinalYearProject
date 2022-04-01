@@ -350,7 +350,7 @@ protected:
 
 	ScenePerFrameCB m_PerFrameCBs[s_kuiSwapChainBufferCount];
 
-	UINT m_uiNumLights = 0;
+	UINT m_uiNumLights = 2;
 
 	//G Buffer pass shader names
 	LPCWSTR m_wsGBufferRayGenName = L"GBufferRayGen";

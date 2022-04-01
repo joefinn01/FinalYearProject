@@ -58,6 +58,9 @@
     <Filter Include="Shaders\Compute">
       <UniqueIdentifier>{8ca61254-1bf8-4ecf-abe7-b7436ac20e7b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Include\json">
+      <UniqueIdentifier>{8e5f1bd4-2b2a-479d-ba71-979d585583bb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -320,6 +323,9 @@
     <ClInclude Include="Commons\UAVDescriptor.h">
       <Filter>Commons\Descriptors</Filter>
     </ClInclude>
+    <ClInclude Include="Include\json\json.hpp">
+      <Filter>Include\json</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -345,7 +351,7 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\LightingHelper.hlsli">
-      <Filter>Shaders\Raster</Filter>
+      <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

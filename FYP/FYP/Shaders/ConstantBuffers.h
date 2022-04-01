@@ -6,18 +6,101 @@
 #else
 #include <DirectXMath.h>
 
+#include "Helpers/ImGuiHelper.h"
+#include "Include/ImGui/imgui.h"
+
 using namespace DirectX;
+#endif
+
+#ifndef HLSL
+
+enum class LightType : int
+{
+	DIRECTIONAL = 0,
+	POINT,
+
+	COUNT
+};
+
 #endif
 
 struct LightCB
 {
 	XMFLOAT3 Position;
-	int Type;
 
-	XMFLOAT4 Color;
+#ifdef HLSL
+	int Type;
+#else
+	LightType Type;
+#endif
+
+	XMFLOAT3 Direction;	//This is NOT normalized.
+	float Range;
+
+	XMFLOAT3 Color;
+	float Power;
 
 	XMFLOAT3 Attenuation;
-	float pad;
+	int Enabled;
+
+#ifndef HLSL
+
+	void ShowUI()
+	{
+		std::string name;
+
+		if (Type == LightType::DIRECTIONAL)
+		{
+			name = "Directional";
+		}
+		else if (Type == LightType::POINT)
+		{
+			name = "Point";
+		}
+
+		if (ImGui::TreeNode(name.c_str()))
+		{
+			ImGuiHelper::DragFloat3("Colour", Color, 150.0f, 0.01f, 0, 1);
+
+			ImGui::Spacing();
+
+			ImGuiHelper::DragFloat("Power", Power, 150.0f, 0.01f, 0, 100);
+
+			ImGui::Spacing();
+
+			bool bEnabled = (bool)Enabled;
+			if (ImGuiHelper::Checkbox("Enabled", bEnabled, 150.0f) == true)
+			{
+				Enabled = (int)bEnabled;
+			}
+
+			ImGui::Spacing();
+
+			if (Type == LightType::DIRECTIONAL)
+			{
+				ImGuiHelper::DragFloat3("Direction", Direction, 150.0f, 0.01f, -1.0f, 1.0f);
+
+				ImGui::Spacing();
+			}
+			else if (Type == LightType::POINT)
+			{
+				ImGuiHelper::DragFloat3("Position", Position, 150.0f);
+
+				ImGui::Spacing();
+
+				ImGuiHelper::DragFloat3("Attenuation", Attenuation, 150.0f, 0.1f, 0.0f, 100.0f);
+
+				ImGui::Spacing();
+
+				ImGuiHelper::DragFloat("Range", Range, 150.0f, 0.1f, 0.0f, 100000.0f);
+			}
+
+			ImGui::TreePop();
+		}
+
+	}
+
+#endif
 };
 
 struct ScenePerFrameCB

@@ -1484,22 +1484,26 @@ void App::InitScene()
 
 void App::InitConstantBuffers()
 {
-	m_uiNumLights = 1;
-
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		UpdatePerFrameCB(i);
 	}
 
-	m_LightCBs[0].Color = XMFLOAT4(1, 1, 1, 1);
-	m_LightCBs[0].Position = XMFLOAT3(0, 1.8f, 0);
+	m_LightCBs[0].Position = XMFLOAT3(0, 1.9f, 0);
+	m_LightCBs[0].Type = LightType::POINT;
+	m_LightCBs[0].Color = XMFLOAT3(1, 1, 1);
+	m_LightCBs[0].Power = 1.0f;
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+	m_LightCBs[0].Enabled = false;
+	m_LightCBs[0].Range = 1000.0f;
 
 	m_pLight->SetPosition(m_LightCBs[0].Position);
 
-	m_LightCBs[1].Color = XMFLOAT4(0, 1, 0, 1);
-	m_LightCBs[1].Position = XMFLOAT3(10, 0, 0);
-	m_LightCBs[1].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+	m_LightCBs[1].Type = LightType::DIRECTIONAL;
+	m_LightCBs[1].Color = XMFLOAT3(1, 1, 1);
+	m_LightCBs[1].Power = 1.45f;
+	m_LightCBs[1].Enabled = true;
+	m_LightCBs[1].Direction = XMFLOAT3(0, -1.0f, 0.3f);
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
@@ -1550,20 +1554,12 @@ void App::DrawImGui()
 
 	DebugHelper::ShowUI();
 
-	if (ImGui::TreeNodeEx("Light", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
+	if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoAutoOpenOnLog))
 	{
-		if (ImGuiHelper::DragFloat3("Position", m_LightCBs[0].Position))
+		for (int i = 0; i < m_uiNumLights; ++i)
 		{
-			m_pLight->SetPosition(m_LightCBs[0].Position);
+			m_LightCBs[i].ShowUI();
 		}
-
-		ImGui::Spacing();
-
-		ImGuiHelper::DragFloat4("Colour", m_LightCBs[0].Color, 100.0f, 0.01f, 0.0f, 1.0f);
-
-		ImGui::Spacing();
-
-		ImGuiHelper::DragFloat3("Attenuation", m_LightCBs[0].Attenuation);
 
 		ImGui::TreePop();
 	}
