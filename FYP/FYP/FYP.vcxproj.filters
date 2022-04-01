@@ -55,6 +55,9 @@
     <Filter Include="Commons\Descriptors">
       <UniqueIdentifier>{b53f5e17-54f8-4a08-8cf5-149520e4c4d5}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders\Compute">
+      <UniqueIdentifier>{8ca61254-1bf8-4ecf-abe7-b7436ac20e7b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
@@ -355,12 +358,6 @@
     <FxCompile Include="Shaders\RayGen.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\GBufferVertex.hlsl">
-      <Filter>Shaders\Raster</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\GBufferPixel.hlsl">
-      <Filter>Shaders\Raster</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\Octahedral.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
@@ -368,12 +365,6 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\Irradiance.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ProbeBlendingCompute.hlsl">
-      <Filter>Shaders</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\ProbeBorderBlendingCompute.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="Shaders\ProbeHelper.hlsl">
@@ -387,6 +378,12 @@
     </FxCompile>
     <FxCompile Include="Shaders\LightPassPixel.hlsl">
       <Filter>Shaders\Raster</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ProbeBlendingCompute.hlsl">
+      <Filter>Shaders\Compute</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\ProbeBorderBlendingCompute.hlsl">
+      <Filter>Shaders\Compute</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>
