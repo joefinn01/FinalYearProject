@@ -1,5 +1,5 @@
 #include "ProbeHelper.hlsl"
-#include "RaytracedLightingHelper.hlsl"
+#include "LightingHelper.hlsli"
 #include "RaytracingCommons.hlsli"
 #include "Irradiance.hlsl"
 

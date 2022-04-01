@@ -1,6 +1,5 @@
 #include "RaytracingCommons.hlsli"
 #include "Payloads.hlsli"
-#include "RaytracedLightingHelper.hlsl"
 #include "LightingHelper.hlsli"
 
 RWTexture2D<float4> NormalW : register(u0);
