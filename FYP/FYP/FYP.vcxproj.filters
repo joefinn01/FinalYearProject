@@ -361,12 +361,6 @@
     <FxCompile Include="Shaders\GBufferPixel.hlsl">
       <Filter>Shaders\Raster</Filter>
     </FxCompile>
-    <FxCompile Include="Shaders\LightPixel.hlsl">
-      <Filter>Shaders\Raster</Filter>
-    </FxCompile>
-    <FxCompile Include="Shaders\LightVertex.hlsl">
-      <Filter>Shaders\Raster</Filter>
-    </FxCompile>
     <FxCompile Include="Shaders\RaytracedLightingHelper.hlsl">
       <Filter>Shaders\Raytracing</Filter>
     </FxCompile>
