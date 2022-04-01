@@ -69,8 +69,13 @@ namespace RaytracingPass
 
 enum class ClosestHitShaderVariants
 {
-	ALBEDO = 0,
-	NONE,
+	NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS = 0,
+	NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS,
+	NORMAL_ALBEDO_METALLIC_ROUGHNESS,
+	OCCLUSION_ALBEDO_METALLIC_ROUGHNESS,
+	ALBEDO_METALLIC_ROUGHNESS,
+	ALBEDO,
+	NOTHING,
 
 	COUNT
 };
@@ -84,7 +89,7 @@ public:
 
 	void Update(const Timer& kTimer);
 
-	void Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	void Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList, AccelerationBuffers& topLevelBuffer);
 
 	//Getters
 	const DirectX::XMFLOAT3& GetPosition() const;
@@ -145,9 +150,6 @@ private:
 	bool CreateMissShaderTable();
 	bool CreateHitGroupShaderTable();
 
-	bool CreateAccelerationStructures();
-	bool CreateTLAS(bool bUpdate);
-
 	bool CreatePSOs();
 
 	bool CompileShaders();
@@ -168,7 +170,7 @@ private:
 
 	void CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_STATE_OBJECT_DESC& pipelineDesc, D3D12_HIT_GROUP_TYPE hitGroupType = D3D12_HIT_GROUP_TYPE_TRIANGLES);
 
-	void PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
+	void PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList, AccelerationBuffers& topLevelBuffer);
 	void BlendProbeAtlases(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList);
 
 	void Offset(float& pos, int& probeOffset, int probeCount, float probeSpacing, int direction);
@@ -205,14 +207,24 @@ private:
 	LPCWSTR m_kwsRayGenName = L"RayGen";
 	LPCWSTR m_kwsMissName = L"Miss";
 
-	LPCWSTR m_ClosestHitNames[(int)ClosestHitShaderVariants::COUNT] = 
+	LPCWSTR m_ClosestHitNames[(int)ClosestHitShaderVariants::COUNT] =
 	{
+		L"ClosestHitNormalOcclusionEmissionAlbedoMetallicRoughness",
+		L"ClosestHitNormalOcclusionAlbedoMetallicRoughness",
+		L"ClosestHitNormalAlbedoMetallicRoughness",
+		L"ClosestHitOcclusionAlbedoMetallicRoughness",
+		L"ClosestHitAlbedoMetallicRoughness",
 		L"ClosestHitAlbedo",
 		L"ClosestHit",
 	};
 
-	LPCWSTR m_HitGroupNames[(int)ClosestHitShaderVariants::COUNT] = 
+	LPCWSTR m_HitGroupNames[(int)ClosestHitShaderVariants::COUNT] =
 	{
+		L"HitGroupNormalOcclusionEmissionAlbedoMetallicRoughness",
+		L"HitGroupNormalOcclusionAlbedoMetallicRoughness",
+		L"HitGroupNormalAlbedoMetallicRoughness",
+		L"HitGroupOcclusionAlbedoMetallicRoughness",
+		L"HitGroupAlbedoMetallicRoughness",
 		L"HitGroupAlbedo",
 		L"HitGroup",
 	};
@@ -245,13 +257,11 @@ private:
 
 	UploadBuffer<RaytracePerFrameCB>* m_pRaytracedPerFrameUpload = nullptr;
 
-	AccelerationBuffers m_TopLevelBuffer;
-
-	float m_fMaxRayDistance = 10.0f;
+	float m_fMaxRayDistance = 10000.0f;
 	float m_fViewBias = 0.1f;
 	float m_fNormalBias = 0.02f;
 	int m_iRaysPerProbe = 288;
-	float m_fBrightnessThreshold = 1.0f;
+	float m_fBrightnessThreshold = 2.0f;
 	float m_fDistancePower = 50.0f;
 	float m_fHysteresis = 0.97f;
 	int m_iIrradianceFormat = 1;

@@ -388,5 +388,14 @@
     <FxCompile Include="Shaders\ProbeHelper.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="Shaders\RayGenGBuffer.hlsl">
+      <Filter>Shaders\Raytracing</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\LightPassVertex.hlsl">
+      <Filter>Shaders\Raster</Filter>
+    </FxCompile>
+    <FxCompile Include="Shaders\LightPassPixel.hlsl">
+      <Filter>Shaders\Raster</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

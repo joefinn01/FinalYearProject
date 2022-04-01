@@ -66,10 +66,10 @@ struct PrimitiveInstanceCB
 
 struct DeferredPerFrameCB
 {
-	UINT32 NormalIndex;
 	UINT32 AlbedoIndex;
-	UINT32 MetallicRoughnessOcclusion;
-	UINT32 DepthIndex;
+	UINT32 DirectLightIndex;
+	UINT32 PositionIndex;
+	UINT32 NormalIndex;
 };
 
 struct RaytracePerFrameCB

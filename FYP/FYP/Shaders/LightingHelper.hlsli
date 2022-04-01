@@ -32,22 +32,8 @@ float GeometryDistribution(float3 normal, float3 view, float3 light, float fRoug
 
 }
 
-float3 FresnelSchlick(float fNormDotHalf, float3 reflectance0)
+float3 FresnelSchlick(float fHalfDotView, float3 reflectance0)
 {
-    return reflectance0 + (1.0f - reflectance0) * pow(clamp(1.0f - fNormDotHalf, 0.0f, 1.0f), 5.0f);
+    return reflectance0 + (1.0f - reflectance0) * pow(clamp(1.0f - fHalfDotView, 0.0f, 1.0f), 5.0f);
 }
-
-float3 GetNormal(float2 uv, float3 normal, float3 tangent, Texture2D tex, SamplerState samplerState)
-{
-    float3x3 tbn = float3x3(tangent, cross(normal, tangent), normal);
-    
-    //Remap so between -1 and 1
-    float3 normalT = tex.SampleLevel(samplerState, uv, 0).xyz;
-    normalT *= 2.0f;
-    normalT -= 1.0f;
-
-    //Transform to world space
-    return normalize(mul(normalT, tbn));
-}
-
 #endif

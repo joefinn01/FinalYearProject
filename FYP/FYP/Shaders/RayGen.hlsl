@@ -3,6 +3,8 @@
 #include "RaytracingCommons.hlsli"
 #include "Irradiance.hlsl"
 
+RWTexture2D<float4> RayData : register(u0);
+
 [shader("raygeneration")]
 void RayGen()
 {
@@ -48,7 +50,7 @@ void RayGen()
         return;
     }
     
-    float3 diffuseLight = CalculateDirectDiffuseLight(payload);
+    float3 diffuseLight = CalculateDirectLight(payload);
     float3 surfaceBias = GetSurfaceBias(payload.NormalW, directionW, g_RaytracePerFrame.NormalBias, g_RaytracePerFrame.ViewBias);
     float blendWeight = GetBlendWeight(payload.PosW, g_RaytracePerFrame.VolumePosition, g_RaytracePerFrame.ProbeOffsets, g_RaytracePerFrame.ProbeSpacing, g_RaytracePerFrame.ProbeCounts);
     

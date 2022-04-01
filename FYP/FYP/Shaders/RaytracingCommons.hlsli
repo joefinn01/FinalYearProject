@@ -9,15 +9,13 @@ StructuredBuffer<Vertex> Vertices[] : register(t0, space100);
 
 RaytracingAccelerationStructure Scene : register(t0, space200);
 
-RWTexture2D<float4> RayData : register(u0);
-
 struct Ray
 {
     float3 origin;
     float3 direction;
 };
 
-float3 HitWoldPosition()
+float3 HitWorldPosition()
 {
     return WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 }

@@ -6,7 +6,7 @@ struct PackedPayload
     float HitDistance;
     float3 PosW;
     uint4 Packed0; //X = Albedo R && Albedo G, Y = Albedo B and Normal X, Z = Normal  and Normal Z, W = Metallic and Roughness
-    uint4 Packed1; //X = ShadingNormal X and ShadingNormal Y, Y = ShadingNormal Z and Opacity Z = Hit Type
+    uint4 Packed1; //X = ShadingNormal X and ShadingNormal Y, Y = ShadingNormal Z and Opacity, Z = Hit Type and Occlusion
 };
 
 struct Payload
@@ -20,6 +20,7 @@ struct Payload
     float3 ShadingNormalW;
     float HitDistance;
     uint HitType;
+    float Occlusion;
 };
 
 Payload UnpackPayload(PackedPayload packedPayload)
@@ -42,7 +43,8 @@ Payload UnpackPayload(PackedPayload packedPayload)
     payload.ShadingNormalW.z = f16tof32(packedPayload.Packed1.y);
     payload.Opacity = f16tof32(packedPayload.Packed1.y >> 16);
     payload.HitType = f16tof32(packedPayload.Packed1.z);
-
+    payload.Occlusion = f16tof32(packedPayload.Packed1.z >> 16);
+    
     return payload;
 }
 
@@ -67,6 +69,7 @@ PackedPayload PackPayload(Payload payload)
     packedPayload.Packed1.y = f32tof16(payload.ShadingNormalW.z);
     packedPayload.Packed1.y |= f32tof16(payload.Opacity) << 16;
     packedPayload.Packed1.z = f32tof16(payload.HitType);
+    packedPayload.Packed1.z |= f32tof16(payload.Occlusion) << 16;
     
     return packedPayload;
 }

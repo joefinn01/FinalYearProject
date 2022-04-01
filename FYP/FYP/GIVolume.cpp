@@ -52,8 +52,6 @@ GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* 
 	CreateConstantBuffers();
 
 	UpdateConstantBuffers();
-
-	CreateAccelerationStructures();
 }
 
 void GIVolume::ShowUI()
@@ -142,17 +140,12 @@ void GIVolume::Update(const Timer& kTimer)
 	UpdateConstantBuffers();
 }
 
-void GIVolume::Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
+void GIVolume::Draw(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList, AccelerationBuffers& topLevelBuffer)
 {
-	if (CreateTLAS(true) == false)
-	{
-		return;
-	}
-
 	GPU_PROFILE_BEGIN(GpuStats::DRAW_VOLUME, pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Draw GI Volume"));
 
-	PopulateRayData(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
+	PopulateRayData(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList, topLevelBuffer);
 	BlendProbeAtlases(pSRVHeap, pScenePerFrameUpload, pGraphicsCommandList);
 
 	PIX_ONLY(PIXEndEvent());
@@ -782,12 +775,32 @@ bool GIVolume::CreateHitGroupShaderTable()
 
 				switch (pNode->m_Primitives[i]->m_Attributes)
 				{
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::EMISSIVE | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NORMAL_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
 				case PrimitiveAttributes::ALBEDO:
 					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::ALBEDO]);
 					break;
 
 				default:
-					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NONE]);
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_HitGroupNames[(int)ClosestHitShaderVariants::NOTHING]);
 					break;
 				}
 
@@ -803,127 +816,6 @@ bool GIVolume::CreateHitGroupShaderTable()
 
 	m_pHitGroupTable = hitGroupTable.GetBuffer();
 	m_uiHitGroupRecordSize = hitGroupTable.GetRecordSize();
-
-	return true;
-}
-
-bool GIVolume::CreateAccelerationStructures()
-{
-	App::GetApp()->ResetCommandList();
-
-	if (MeshManager::GetInstance()->CreateBLAS(App::GetApp()->GetGraphicsCommandList(), App::GetApp()->GetDevice()) == false)
-	{
-		return false;
-	}
-
-	if (CreateTLAS(false) == false)
-	{
-		return false;
-	}
-
-	App::GetApp()->ExecuteCommandList();
-
-	return true;
-}
-
-bool GIVolume::CreateTLAS(bool bUpdate)
-{
-	ID3D12Device5* pDevice = App::GetApp()->GetDevice();
-	ID3D12GraphicsCommandList4* pGraphicsCommandList = App::GetApp()->GetGraphicsCommandList();
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
-	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
-	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
-	inputs.NumDescs = MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives();
-	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
-	pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
-
-	if (bUpdate == true)
-	{
-		pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
-	}
-	else
-	{
-		if (DXRHelper::CreateUAVBuffer(pDevice, info.ScratchDataSizeInBytes, m_TopLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
-		{
-			LOG_ERROR(tag, L"Failed to create the top level acceleration structure scratch buffer!");
-
-			return false;
-		}
-
-		if (DXRHelper::CreateUAVBuffer(pDevice, info.ResultDataMaxSizeInBytes, m_TopLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
-		{
-			LOG_ERROR(tag, L"Failed to create the top level acceleration structure result buffer!");
-
-			return false;
-		}
-
-		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(pDevice, MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), false);
-	}
-
-	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress();
-
-	int iCount = 0;
-
-	std::vector<MeshNode*>* pMeshNodes;
-
-	XMFLOAT3X4 world;
-
-	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
-	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
-		pMeshNodes = it->second->GetMesh()->GetNodes();
-
-		for (int i = 0; i < pMeshNodes->size(); ++i)
-		{
-			for (int j = 0; j < pMeshNodes->at(i)->m_Primitives.size(); ++j)
-			{
-				D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
-
-				XMStoreFloat3x4(&world, XMMatrixMultiply(XMLoadFloat4x4(&pMeshNodes->at(i)->m_Transform), XMLoadFloat4x4(&it->second->GetWorldMatrix())));
-
-				for (int j = 0; j < 3; ++j)
-				{
-					for (int k = 0; k < 4; ++k)
-					{
-						instanceDesc.Transform[j][k] = world.m[j][k];
-					}
-				}
-
-				instanceDesc.AccelerationStructure = pMeshNodes->at(i)->m_Primitives[j]->m_BottomLevel.m_pResult->GetGPUVirtualAddress();
-				instanceDesc.Flags = 0;
-				instanceDesc.InstanceID = iCount;
-				instanceDesc.InstanceContributionToHitGroupIndex = iCount;
-				instanceDesc.InstanceMask = 0xFF;
-
-				m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
-
-				++iCount;
-			}
-		}
-	}
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
-	buildDesc.Inputs = inputs;
-	buildDesc.DestAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
-	buildDesc.ScratchAccelerationStructureData = m_TopLevelBuffer.m_pScratch->GetGPUVirtualAddress();
-
-	if (bUpdate == true)
-	{
-		buildDesc.SourceAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
-
-		buildDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
-	}
-
-	pGraphicsCommandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-	pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
 
 	return true;
 }
@@ -1052,6 +944,44 @@ bool GIVolume::CompileShaders()
 		wsDistanceTexelsPerProbe.c_str()
 	};
 
+	//closest hit group defines
+	LPCWSTR normalOcclusionEmissionAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"OCCLUSION_MAPPING=1",
+		L"EMISSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR normalOcclusionAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"OCCLUSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR normalAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR occlusionAlbedoMetallicRoughness[] =
+	{
+		L"OCCLUSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR albedoMetallicRoughness[] =
+	{
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
 	LPCWSTR albedo[] =
 	{
 		L"ALBEDO=1",
@@ -1063,8 +993,14 @@ bool GIVolume::CompileShaders()
 		//Raytracing pass shaders
 		CompileRecord(L"Shaders/RayGen.hlsl", m_kwsRayGenName, L"lib_6_3"),
 		CompileRecord(L"Shaders/Miss.hlsl", m_kwsMissName, L"lib_6_3"),
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NONE], L"lib_6_3"),
-		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO], L"lib_6_3", L"", albedo, _countof(albedo)),
+
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS], normalOcclusionEmissionAlbedoMetallicRoughness, _countof(normalOcclusionEmissionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], normalOcclusionAlbedoMetallicRoughness, _countof(normalOcclusionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::NORMAL_ALBEDO_METALLIC_ROUGHNESS], normalAlbedoMetallicRoughness, _countof(normalAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], occlusionAlbedoMetallicRoughness, _countof(occlusionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO_METALLIC_ROUGHNESS], albedoMetallicRoughness, _countof(albedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::ALBEDO], albedo, _countof(albedo)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_ClosestHitNames[(int)ClosestHitShaderVariants::NOTHING], L"lib_6_3", m_ClosestHitNames[(int)ClosestHitShaderVariants::NOTHING]),
 
 		CompileRecord(L"Shaders/ProbeBlendingCompute.hlsl", m_IrradianceProbeBlendingName, L"cs_6_3", L"", irradianceProbeBlendingDefines, _countof(irradianceProbeBlendingDefines)),
 		CompileRecord(L"Shaders/ProbeBorderBlendingCompute.hlsl", m_IrradianceRowProbeBlendingName, L"cs_6_3", L"RowBlend", irradianceBorderProbeBlendingDefines, _countof(irradianceBorderProbeBlendingDefines)),
@@ -1332,7 +1268,7 @@ void GIVolume::CreateHitGroup(LPCWSTR shaderName, LPCWSTR shaderExport, CD3DX12_
 	pHitGroup->SetHitGroupType(hitGroupType);
 }
 
-void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList)
+void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFrameCB>* pScenePerFrameUpload, ID3D12GraphicsCommandList4* pGraphicsCommandList, AccelerationBuffers& topLevelBuffer)
 {
 	GPU_PROFILE_BEGIN(GpuStats::TRACE_RAYS, pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(pGraphicsCommandList, PIX_COLOR(50, 50, 50), "Populate Ray Data"));
@@ -1341,11 +1277,11 @@ void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFr
 	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
 	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
 	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
-	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
 	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
+	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
 	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
-	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
 	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
+	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
 	dispatchDesc.Width = m_iRaysPerProbe;
 	dispatchDesc.Height = m_ProbeCounts.x * m_ProbeCounts.y * m_ProbeCounts.z;
 	dispatchDesc.Depth = 1;
@@ -1355,7 +1291,7 @@ void GIVolume::PopulateRayData(DescriptorHeap* pSRVHeap, UploadBuffer<ScenePerFr
 	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::RAY_DATA, pSRVHeap->GetGpuDescriptorHandle(m_pRayDataAtlas->GetUAVDesc()->GetDescriptorIndex()));
 	pGraphicsCommandList->SetComputeRootDescriptorTable(RaytracingPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, pSRVHeap->GetGpuDescriptorHandle());
 
-	pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
+	pGraphicsCommandList->SetComputeRootShaderResourceView(RaytracingPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, topLevelBuffer.m_pResult->GetGPUVirtualAddress());
 
 	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, pScenePerFrameUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
 	pGraphicsCommandList->SetComputeRootConstantBufferView(RaytracingPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pRaytracedPerFrameUpload->GetBufferGPUAddress());

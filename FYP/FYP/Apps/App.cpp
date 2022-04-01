@@ -147,6 +147,11 @@ bool App::Init()
 		return false;
 	}
 
+	if (CreateStateObject() == false)
+	{
+		return false;
+	}
+
 	CreateInputDescs();
 
 	if (CreatePSOs() == false)
@@ -160,8 +165,6 @@ bool App::Init()
 	{
 		return false;
 	}
-
-	m_pRaytracingOutput = new Texture(nullptr, m_BackBufferFormat);
 
 	Texture** GBuffer;
 
@@ -187,6 +190,16 @@ bool App::Init()
 	CreateScreenQuad();
 
 	InitScene();
+
+	if (CreateShaderTables() == false)
+	{
+		return false;
+	}
+
+	if (CreateAccelerationStructures() == false)
+	{
+		return false;
+	}
 
 	CreateCBs();
 
@@ -323,51 +336,7 @@ void App::OnResize()
 
 	CreateOutputBuffers();
 
-	Descriptor** GBufferRTVs;
 	Texture** GBuffer;
-
-	//G Buffer RTVs haven't been created yet so create them
-	if (m_pRTVHeap->GetNumDescsAllocated() != m_pRTVHeap->GetMaxNumDescs())
-	{
-		UINT uiDescIndex = 0;
-
-		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
-		{
-			GBuffer = GetGBuffer(i);
-			GBufferRTVs = GetGBufferRTVDescs(i);
-
-			for (int j = 0; j < (int)GBuffer::COUNT; ++j)
-			{
-				if (m_pRTVHeap->Allocate(uiDescIndex) == false)
-				{
-					LOG_ERROR(tag, L"Couldn't allocate G Buffer RTV as heap is full!");
-
-					return;
-				}
-
-				GBufferRTVs[j] = new RTVDescriptor(uiDescIndex, GBuffer[j]->GetResource().Get(), m_pRTVHeap->GetCpuDescriptorHandle(uiDescIndex));
-			}
-		}
-	}
-	else 	//Recreate G buffer RTV
-	{
-		Descriptor* pDesc = nullptr;
-
-		for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
-		{
-			GBuffer = GetGBuffer(i);
-			GBufferRTVs = GetGBufferRTVDescs(i);
-
-			for (int j = 0; j < (int)GBuffer::COUNT; ++j)
-			{
-				pDesc = new RTVDescriptor(GBufferRTVs[j]->GetDescriptorIndex(), GBuffer[j]->GetResource().Get(), m_pRTVHeap->GetCpuDescriptorHandle(GBufferRTVs[j]->GetDescriptorIndex()));
-				delete GBufferRTVs[j];
-				GBufferRTVs[j] = pDesc;
-			}
-		}
-	}
-
-	m_pRaytracingOutput->RecreateUAVDesc(m_pSRVHeap);
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
@@ -376,6 +345,7 @@ void App::OnResize()
 		for (int j = 0; j < (int)GBuffer::COUNT; ++j)
 		{
 			GBuffer[j]->RecreateSRVDesc(m_pSRVHeap);
+			GBuffer[j]->RecreateUAVDesc(m_pSRVHeap);
 		}
 
 		GetDepthStencilBuffer(i)->RecreateSRVDesc(m_pSRVHeap, m_DepthStencilSRVFormat);
@@ -479,7 +449,7 @@ void App::Draw()
 
 		m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		m_pGIVolume->Draw(m_pSRVHeap, m_pScenePerFrameCBUpload, m_pGraphicsCommandList.Get());
+		m_pGIVolume->Draw(m_pSRVHeap, m_pScenePerFrameCBUpload, m_pGraphicsCommandList.Get(), m_TopLevelBuffer);
 
 		DrawDeferredPass();
 
@@ -550,114 +520,62 @@ void App::DrawDeferredPass()
 
 void App::DrawGBufferPass()
 {
+	if (CreateTLAS(true) == false)
+	{
+		return;
+	}
+
 	PROFILE("G Buffer Pass");
 	GPU_PROFILE_BEGIN(GpuStats::GBUFFER, m_pGraphicsCommandList)
 	PIX_ONLY(PIXBeginEvent(m_pGraphicsCommandList.Get(), PIX_COLOR(50, 50, 50), "G Buffer Pass"));
 
-	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pGBufferRootSignature.Get());
-
-	m_pGraphicsCommandList->RSSetViewports(1, &m_Viewport);
-	m_pGraphicsCommandList->RSSetScissorRects(1, &m_ScissorRect);
-
 	Texture** GBuffer = GetGBuffer();
 
-	CD3DX12_RESOURCE_BARRIER* pResourceBarriers = new CD3DX12_RESOURCE_BARRIER[(int)GBuffer::COUNT + 1];
+	//Don't transition the Indirect light texture
+	CD3DX12_RESOURCE_BARRIER* pResourceBarriers = new CD3DX12_RESOURCE_BARRIER[(int)GBuffer::COUNT - 1];
 
-	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	for (int i = 0; i < (int)GBuffer::COUNT - 1; ++i)
 	{
-		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	}
 
-	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT - 1, pResourceBarriers);
 
-	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
+	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {};
+	dispatchDesc.RayGenerationShaderRecord.StartAddress = m_pRayGenTable->GetGPUVirtualAddress();
+	dispatchDesc.RayGenerationShaderRecord.SizeInBytes = m_pRayGenTable->GetDesc().Width;
+	dispatchDesc.MissShaderTable.StartAddress = m_pMissTable->GetGPUVirtualAddress();
+	dispatchDesc.MissShaderTable.SizeInBytes = m_pMissTable->GetDesc().Width;
+	dispatchDesc.MissShaderTable.StrideInBytes = m_uiMissRecordSize;
+	dispatchDesc.HitGroupTable.StartAddress = m_pHitGroupTable->GetGPUVirtualAddress();
+	dispatchDesc.HitGroupTable.SizeInBytes = m_pHitGroupTable->GetDesc().Width;
+	dispatchDesc.HitGroupTable.StrideInBytes = m_uiHitGroupRecordSize;
+	dispatchDesc.Width = WindowManager::GetInstance()->GetWindowWidth();
+	dispatchDesc.Height = WindowManager::GetInstance()->GetWindowHeight();
+	dispatchDesc.Depth = 1;
 
-	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
+	m_pGraphicsCommandList->SetComputeRootSignature(m_pGlobalRootSignature.Get());
+
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(DeferredPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle());
+	m_pGraphicsCommandList->SetComputeRootShaderResourceView(DeferredPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE, m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress());
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(DeferredPass::GlobalRootSignatureParams::NORMAL, m_pSRVHeap->GetGpuDescriptorHandle(GBuffer[(int)GBuffer::NORMAL]->GetUAVDesc()->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(DeferredPass::GlobalRootSignatureParams::ALBEDO, m_pSRVHeap->GetGpuDescriptorHandle(GBuffer[(int)GBuffer::ALBEDO]->GetUAVDesc()->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(DeferredPass::GlobalRootSignatureParams::DIRECT_LIGHT, m_pSRVHeap->GetGpuDescriptorHandle(GBuffer[(int)GBuffer::DIRECT_LIGHT]->GetUAVDesc()->GetDescriptorIndex()));
+	m_pGraphicsCommandList->SetComputeRootDescriptorTable(DeferredPass::GlobalRootSignatureParams::POSITION, m_pSRVHeap->GetGpuDescriptorHandle(GBuffer[(int)GBuffer::POSITION]->GetUAVDesc()->GetDescriptorIndex()));
+
+	m_pGraphicsCommandList->SetComputeRootConstantBufferView(DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(App::GetApp()->GetFrameIndex()));
+	m_pGraphicsCommandList->SetComputeRootConstantBufferView(DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pGIVolume->GetRaytracePerFrameUpload()->GetBufferGPUAddress());
+
+	m_pGraphicsCommandList->SetPipelineState1(m_pStateObject.Get());
+
+	m_pGraphicsCommandList->DispatchRays(&dispatchDesc);
+
+	for (int i = 0; i < (int)GBuffer::COUNT - 1; ++i)
 	{
-		m_pGraphicsCommandList->ClearRenderTargetView(m_pRTVHeap->GetCpuDescriptorHandle(GetGBufferRTVDescs()[i]->GetDescriptorIndex()), m_GBufferClearColors[i], 0, nullptr);
+		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_GENERIC_READ);
 	}
 
-	m_pGraphicsCommandList->ClearDepthStencilView(m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-	D3D12_CPU_DESCRIPTOR_HANDLE* pRenderTargetDescs = new D3D12_CPU_DESCRIPTOR_HANDLE[(int)GBuffer::COUNT];
-
-	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
-	{
-		pRenderTargetDescs[i] = m_pRTVHeap->GetCpuDescriptorHandle(GetGBufferRTVDescs()[i]->GetDescriptorIndex());
-	}
-
-	m_pGraphicsCommandList->OMSetRenderTargets((int)GBuffer::COUNT, pRenderTargetDescs, FALSE, &m_pDSVHeap->GetCpuDescriptorHandle(GetDepthStencilBufferView()->GetDescriptorIndex()));
-
-	m_pGraphicsCommandList->SetGraphicsRootDescriptorTable(DeferredPass::GBufferPass::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle(0));
-	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
-
-	RenderInfo* pRenderInfo = nullptr;
-
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
-	D3D12_INDEX_BUFFER_VIEW indexBufferView;
-
-	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
-	{
-		for (int i = 0; i < it->second.size(); ++i)
-		{
-			pRenderInfo = &it->second[i];
-
-			switch (pRenderInfo->m_pPrimitive->m_Attributes)
-			{
-			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS | PrimitiveAttributes::EMISSIVE:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION].Get());
-				break;
-
-			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION].Get());
-				break;
-
-			case PrimitiveAttributes::NORMAL | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL].Get());
-				break;
-
-			case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::OCCLUSION].Get());
-				break;
-
-			case PrimitiveAttributes::METALLIC_ROUGHNESS:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::METALLIC_ROUGHNESS].Get());
-				break;
-
-			case PrimitiveAttributes::ALBEDO:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::ALBEDO].Get());
-				break;
-
-			default:
-				m_pGraphicsCommandList->SetPipelineState(m_pGBufferPSOs[(int)DeferredPass::GBufferPass::ShaderVersions::NOTHING].Get());
-				break;
-			}
-
-			m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB, GetPrimitiveIndexUploadBuffer()->GetBufferGPUAddress((UINT)pRenderInfo->m_uiInstanceIndex));
-
-			vertexBufferView.BufferLocation = pRenderInfo->m_pVertexBuffer->GetBufferGPUAddress();
-			vertexBufferView.StrideInBytes = sizeof(Vertex);
-			vertexBufferView.SizeInBytes = pRenderInfo->m_pVertexBuffer->GetByteSize();
-
-			indexBufferView.BufferLocation = pRenderInfo->m_pIndexBuffer->GetBufferGPUAddress();
-			indexBufferView.Format = DXGI_FORMAT_R32_UINT;
-			indexBufferView.SizeInBytes = pRenderInfo->m_pIndexBuffer->GetByteSize();
-
-			m_pGraphicsCommandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			m_pGraphicsCommandList->IASetIndexBuffer(&indexBufferView);
-
-			m_pGraphicsCommandList->DrawIndexedInstanced(pRenderInfo->m_pPrimitive->m_uiNumIndices, 1, pRenderInfo->m_pPrimitive->m_uiFirstIndex, pRenderInfo->m_pPrimitive->m_uiFirstVertex, 0);
-		}
-	}
-
-	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
-	{
-		pResourceBarriers[i] = CD3DX12_RESOURCE_BARRIER::Transition(GBuffer[i]->GetResource().Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-	}
-
-	pResourceBarriers[(int)GBuffer::COUNT] = CD3DX12_RESOURCE_BARRIER::Transition(GetDepthStencilBuffer()->GetResource().Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_GENERIC_READ);
-
-	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT + 1, pResourceBarriers);
+	m_pGraphicsCommandList->ResourceBarrier((int)GBuffer::COUNT - 1, pResourceBarriers);
 
 	PIX_ONLY(PIXEndEvent());
 	GPU_PROFILE_END(GpuStats::GBUFFER, m_pGraphicsCommandList)
@@ -673,19 +591,22 @@ void App::DrawLightPass()
 	{
 		if (m_bShowIndirect == true)
 		{
-			m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT].Get());
+			m_pGraphicsCommandList->SetPipelineState(m_pLightPassPSOs[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT].Get());
 		}
 		else
 		{
-			m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::USE_GI].Get());
+			m_pGraphicsCommandList->SetPipelineState(m_pLightPassPSOs[(int)DeferredPass::LightPass::ShaderVersions::USE_GI].Get());
 		}
 	}
 	else
 	{
-		m_pGraphicsCommandList->SetPipelineState(m_pLightPSOs[(int)DeferredPass::LightPass::ShaderVersions::DIRECT].Get());
+		m_pGraphicsCommandList->SetPipelineState(m_pLightPassPSOs[(int)DeferredPass::LightPass::ShaderVersions::DIRECT].Get());
 	}
 
-	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pLightRootSignature.Get());
+	m_pGraphicsCommandList->SetGraphicsRootSignature(m_pLightPassSignature.Get());
+
+	m_pGraphicsCommandList->RSSetViewports(1, &m_Viewport);
+	m_pGraphicsCommandList->RSSetScissorRects(1, &m_ScissorRect);
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
@@ -697,9 +618,10 @@ void App::DrawLightPass()
 
 	m_pGraphicsCommandList->OMSetRenderTargets(1, &GetBackBufferView(), FALSE, nullptr);
 
-	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_DEFERRED_CB, GetDeferredPerFrameUploadBuffer()->GetBufferGPUAddress());
-	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB, m_pGIVolume->GetRaytracePerFrameUpload()->GetBufferGPUAddress());
-	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
+	m_pGraphicsCommandList->SetGraphicsRootDescriptorTable(DeferredPass::LightPass::LightPassRootSignatureParams::STANDARD_DESCRIPTORS, m_pSRVHeap->GetGpuDescriptorHandle());
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB, GetDeferredPerFrameUploadBuffer()->GetBufferGPUAddress());
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB, m_pGIVolume->GetRaytracePerFrameUpload()->GetBufferGPUAddress());
+	m_pGraphicsCommandList->SetGraphicsRootConstantBufferView(DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB, m_pScenePerFrameCBUpload->GetBufferGPUAddress(m_uiFrameIndex));
 
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
 	vertexBufferView.BufferLocation = m_pScreenQuadVertexBufferGPU->GetGPUVirtualAddress();
@@ -1170,60 +1092,6 @@ void App::FlushCommandQueue()
 
 bool App::CreatePSOs()
 {
-	if (CreateGBufferPSO() == false)
-	{
-		return false;
-	}
-
-	if (CreateLightPSO() == false)
-	{
-		return false;
-	}
-
-	return true;
-}
-
-bool App::CreateGBufferPSO()
-{
-	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-	psoDesc.InputLayout = { m_DefaultInputDesc.data(), (UINT)m_DefaultInputDesc.size() };
-	psoDesc.pRootSignature = m_pGBufferRootSignature.Get();
-	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-	psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-	psoDesc.SampleMask = UINT_MAX;
-	psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-	psoDesc.NumRenderTargets = (UINT)GBuffer::COUNT;
-	psoDesc.SampleDesc.Count = 1;
-	psoDesc.SampleDesc.Quality = 0;
-	psoDesc.DSVFormat = m_DepthStencilDSVFormat;
-	psoDesc.VS = CD3DX12_SHADER_BYTECODE((void*)m_Shaders[m_wsGBufferVertexName].Get()->GetBufferPointer(), m_Shaders[m_wsGBufferVertexName].Get()->GetBufferSize());
-
-	for (int i = 0; i < (int)GBuffer::COUNT; ++i)
-	{
-		psoDesc.RTVFormats[i] = m_GBufferFormats[i];
-	}
-
-	for (int i = 0; i < (int)DeferredPass::GBufferPass::ShaderVersions::COUNT; ++i)
-	{
-		psoDesc.PS.BytecodeLength = m_Shaders[m_GBufferPixelNames[i]]->GetBufferSize();
-		psoDesc.PS.pShaderBytecode = m_Shaders[m_GBufferPixelNames[i]]->GetBufferPointer();
-
-		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pGBufferPSOs[i].GetAddressOf()));
-
-		if (FAILED(hr))
-		{
-			LOG_ERROR(tag, L"Failed to create one of the G buffer pass pipeline state objects!");
-
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool App::CreateLightPSO()
-{
 	D3D12_DEPTH_STENCIL_DESC depthDesc;
 	depthDesc.DepthEnable = false;
 	depthDesc.StencilEnable = false;
@@ -1231,7 +1099,7 @@ bool App::CreateLightPSO()
 
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 	psoDesc.InputLayout = { m_ScreenQuadInputDesc.data(), (UINT)m_ScreenQuadInputDesc.size() };
-	psoDesc.pRootSignature = m_pLightRootSignature.Get();
+	psoDesc.pRootSignature = m_pLightPassSignature.Get();
 	psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
 	psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	psoDesc.DepthStencilState = depthDesc;
@@ -1242,19 +1110,19 @@ bool App::CreateLightPSO()
 	psoDesc.SampleDesc.Quality = m_b4xMSAAState ? (m_uiMSAAQuality - 1) : 0;
 	psoDesc.RTVFormats[0] = m_BackBufferFormat;
 	psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
-	psoDesc.VS.BytecodeLength = m_Shaders[m_wsLightVertexName].Get()->GetBufferSize();
-	psoDesc.VS.pShaderBytecode = m_Shaders[m_wsLightVertexName].Get()->GetBufferPointer();
-	
+	psoDesc.VS.BytecodeLength = m_Shaders[m_wsLightPassVertexName].Get()->GetBufferSize();
+	psoDesc.VS.pShaderBytecode = m_Shaders[m_wsLightPassVertexName].Get()->GetBufferPointer();
+
 	for (int i = 0; i < (int)DeferredPass::LightPass::ShaderVersions::COUNT; ++i)
 	{
-		psoDesc.PS.BytecodeLength = m_Shaders[m_wsLightPixelNames[i]]->GetBufferSize();
-		psoDesc.PS.pShaderBytecode = m_Shaders[m_wsLightPixelNames[i]]->GetBufferPointer();
+		psoDesc.PS.BytecodeLength = m_Shaders[m_wsLightPassPixelNames[i]].Get()->GetBufferSize();
+		psoDesc.PS.pShaderBytecode = m_Shaders[m_wsLightPassPixelNames[i]].Get()->GetBufferPointer();
 
-		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPSOs[i].GetAddressOf()));
+		HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(m_pLightPassPSOs[i].GetAddressOf()));
 
 		if (FAILED(hr))
 		{
-			LOG_ERROR(tag, L"Failed to create light pass pipeline state object!");
+			LOG_ERROR(tag, L"Failed to create light pass PSO!");
 
 			return false;
 		}
@@ -1302,78 +1170,78 @@ bool App::CompileShaders()
 	ComPtr<IDxcBlob> pBlob;
 
 	//G Buffer pass defines
+	LPCWSTR normalOcclusionEmissionAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"OCCLUSION_MAPPING=1",
+		L"EMISSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR normalOcclusionAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"OCCLUSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR normalAlbedoMetallicRoughness[] =
+	{
+		L"NORMAL_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR occlusionAlbedoMetallicRoughness[] =
+	{
+		L"OCCLUSION_MAPPING=1",
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
+	LPCWSTR albedoMetallicRoughness[] =
+	{
+		L"ALBEDO=1",
+		L"METALLIC_ROUGHNESS=1",
+	};
+
 	LPCWSTR albedo[] =
 	{
 		L"ALBEDO=1",
 	};
 
-	LPCWSTR normal[] =
-	{
-		L"NORMAL_MAPPING=1",
-		L"METALLIC_ROUGHNESS=1",
-		L"ALBEDO=1",
-	};
-
-	LPCWSTR occlusion[] =
-	{
-		L"OCCLUSION_MAPPING=1",
-		L"METALLIC_ROUGHNESS=1",
-		L"ALBEDO=1",
-	};
-
-	LPCWSTR metallicRoughness[] =
-	{
-		L"METALLIC_ROUGHNESS=1",
-		L"ALBEDO=1",
-	};
-
-	LPCWSTR normalOcclusion[] =
-	{
-		L"NORMAL_MAPPING=1",
-		L"OCCLUSION_MAPPING=1",
-		L"METALLIC_ROUGHNESS=1",
-		L"ALBEDO=1",
-	};
-
-	LPCWSTR normalOcclusionEmission[] =
-	{
-		L"NORMAL_MAPPING=1",
-		L"OCCLUSION_MAPPING=1",
-		L"EMISSION_MAPPING=1",
-		L"METALLIC_ROUGHNESS=1",
-		L"ALBEDO=1",
-	};
-
 	//Light pass defines
+	LPCWSTR showIndirect[] =
+	{
+		L"USE_GI=1",
+		L"SHOW_INDIRECT=1",
+	};
+
 	LPCWSTR useGI[] =
 	{
 		L"USE_GI=1",
 	};
 
-	LPCWSTR showIndirect[] =
-	{
-		L"USE_GI=1",
-		L"SHOW_INDIRECT=1"
-	};
-
 	//Create array of shaders to compile
 	CompileRecord records[] =
 	{
-		//G Buffer pass shaders
-		CompileRecord(L"Shaders/GBufferVertex.hlsl", m_wsGBufferVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NOTHING], L"ps_6_3"),	//Nothing
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL], L"ps_6_3", L"main", normal, (int)_countof(normal)),	//Normal
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::OCCLUSION], L"ps_6_3", L"main", occlusion, (int)_countof(occlusion)),	//Occlusion
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION], L"ps_6_3", L"main", normalOcclusion, (int)_countof(normalOcclusion)),	//Normal, Occlusion
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION], L"ps_6_3", L"main", normalOcclusionEmission, (int)_countof(normalOcclusionEmission)),	//Normal, Occlusion, Emission
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::METALLIC_ROUGHNESS], L"ps_6_3", L"main", metallicRoughness, (int)_countof(metallicRoughness)),	//No metallic roughness or anything else
-		CompileRecord(L"Shaders/GBufferPixel.hlsl", m_GBufferPixelNames[(int)DeferredPass::GBufferPass::ShaderVersions::ALBEDO], L"ps_6_3", L"main", albedo, (int)_countof(albedo)),	//Just albedo
+		CompileRecord(L"Shaders/RayGenGBuffer.hlsl", m_wsGBufferRayGenName, L"lib_6_3", L"RayGen"),
+		CompileRecord(L"Shaders/Miss.hlsl", m_wsGBufferMissName, L"lib_6_3", L"Miss"),
 
-		//Light pass shaders
-		CompileRecord(L"Shaders/LightVertex.hlsl", m_wsLightVertexName, L"vs_6_3", L"main"),	//Vertex shader
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::DIRECT], L"ps_6_3", L"main"),	//Just direct light
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::USE_GI], L"ps_6_3", L"main", useGI, (int)_countof(useGI)),	//use global illumination
-		CompileRecord(L"Shaders/LightPixel.hlsl", m_wsLightPixelNames[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT], L"ps_6_3", L"main", showIndirect, (int)_countof(showIndirect)),	//Show indirect light
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS], normalOcclusionEmissionAlbedoMetallicRoughness, _countof(normalOcclusionEmissionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], normalOcclusionAlbedoMetallicRoughness, _countof(normalOcclusionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NORMAL_ALBEDO_METALLIC_ROUGHNESS], normalAlbedoMetallicRoughness, _countof(normalAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS], occlusionAlbedoMetallicRoughness, _countof(occlusionAlbedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::ALBEDO_METALLIC_ROUGHNESS], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::ALBEDO_METALLIC_ROUGHNESS], albedoMetallicRoughness, _countof(albedoMetallicRoughness)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::ALBEDO], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::ALBEDO], albedo, _countof(albedo)),
+		CompileRecord(L"Shaders/Hit.hlsl", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NOTHING], L"lib_6_3", m_GBufferHitNames[(int)DeferredPass::ShaderVersions::NOTHING]),
+
+		CompileRecord(L"Shaders/LightPassVertex.hlsl", m_wsLightPassVertexName, L"vs_6_3"),
+		CompileRecord(L"Shaders/LightPassPixel.hlsl", m_wsLightPassPixelNames[(int)DeferredPass::LightPass::ShaderVersions::DIRECT], L"ps_6_3"),
+		CompileRecord(L"Shaders/LightPassPixel.hlsl", m_wsLightPassPixelNames[(int)DeferredPass::LightPass::ShaderVersions::SHOW_INDIRECT], L"ps_6_3", L"", showIndirect, _countof(showIndirect)),
+		CompileRecord(L"Shaders/LightPassPixel.hlsl", m_wsLightPassPixelNames[(int)DeferredPass::LightPass::ShaderVersions::USE_GI], L"ps_6_3", L"", useGI, _countof(useGI)),
 	};
 
 	for (int i = 0; i < _countof(records); ++i)
@@ -1402,7 +1270,7 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/Cornell/Cornell.gltf", "Cornell", m_pGraphicsCommandList.Get());
+	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Cornell", m_pGraphicsCommandList.Get());
 	MeshManager::GetInstance()->LoadMesh("Models/Sphere/gLTF/Sphere.gltf", "Sphere", m_pGraphicsCommandList.Get());
 	//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
 
@@ -1413,9 +1281,6 @@ void App::CreateGeometry()
 
 bool App::CreateOutputBuffers()
 {
-	//Create raytracing output texture
-	m_pRaytracingOutput->GetResourcePtr()->Reset();
-
 	D3D12_RESOURCE_DESC resDesc = {};
 	resDesc.DepthOrArraySize = 1;
 	resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -1436,20 +1301,9 @@ bool App::CreateOutputBuffers()
 	heapProperties.CreationNodeMask = 0;
 	heapProperties.VisibleNodeMask = 0;
 
-	HRESULT hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_COPY_SOURCE, nullptr, IID_PPV_ARGS(m_pRaytracingOutput->GetResourcePtr()->GetAddressOf()));
-
-	if (FAILED(hr))
-	{
-		LOG_ERROR(tag, L"Failed to create output resource!");
-
-		return false;
-	}
-
-	//Create G Buffer textures and depth stencil texture
-	resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+	HRESULT hr;
 
 	Texture** GBuffer;
-	D3D12_CLEAR_VALUE GBufferClear;
 
 	D3D12_CLEAR_VALUE DepthStencilClear;
 	DepthStencilClear.Format = m_DepthStencilDSVFormat;
@@ -1464,16 +1318,10 @@ bool App::CreateOutputBuffers()
 		{
 			GBuffer[j]->GetResourcePtr()->Reset();
 
-			resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+			resDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 			resDesc.Format = m_GBufferFormats[j];
 
-			GBufferClear.Format = m_GBufferFormats[j];
-			GBufferClear.Color[0] = m_GBufferClearColors[j][0];
-			GBufferClear.Color[1] = m_GBufferClearColors[j][1];
-			GBufferClear.Color[2] = m_GBufferClearColors[j][2];
-			GBufferClear.Color[3] = m_GBufferClearColors[j][3];
-
-			hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, &GBufferClear, IID_PPV_ARGS(GBuffer[j]->GetResourcePtr()->GetAddressOf()));
+			hr = m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(GBuffer[j]->GetResourcePtr()->GetAddressOf()));
 
 			if (FAILED(hr))
 			{
@@ -1576,7 +1424,7 @@ bool App::CheckRaytracingSupport()
 
 void App::CreateCameras()
 {
-	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 1, 0), XMFLOAT3(0, 0, -1), XMFLOAT3(0, 1, 0), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
+	Camera* pCamera = new DebugCamera(XMFLOAT3(0, 1, 0), XMFLOAT3(0, 2, 0), XMFLOAT3(0, 0, 1), m_fCameraNearDepth, m_fCameraFarDepth, "BasicCamera");
 
 	ObjectManager::GetInstance()->AddCamera(pCamera);
 
@@ -1618,10 +1466,10 @@ void App::InitScene()
 
 	GIVolumeDesc volumeDesc;
 	volumeDesc.Position = XMFLOAT3(0, 1, 0);
-	volumeDesc.ProbeCounts = XMINT3(9, 9, 9);
+	volumeDesc.ProbeCounts = XMINT3(22, 22, 22);
 	volumeDesc.ProbeRelocation = false;
 	volumeDesc.ProbeScale = 0.1f;
-	volumeDesc.ProbeSpacing = XMFLOAT3(0.3f, 0.3f, 0.3f);
+	volumeDesc.ProbeSpacing = XMFLOAT3(1.02f, 0.5f, 0.45f);
 	volumeDesc.ProbeTracking = false;
 
 	MeshManager::GetInstance()->GetMesh("Sphere", pMesh);
@@ -1644,7 +1492,7 @@ void App::InitConstantBuffers()
 	}
 
 	m_LightCBs[0].Color = XMFLOAT4(1, 1, 1, 1);
-	m_LightCBs[0].Position = XMFLOAT3(0, 2.0f, 0);
+	m_LightCBs[0].Position = XMFLOAT3(0, 1.8f, 0);
 	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
 
 	m_pLight->SetPosition(m_LightCBs[0].Position);
@@ -1711,7 +1559,7 @@ void App::DrawImGui()
 
 		ImGui::Spacing();
 
-		ImGuiHelper::DragFloat4("Colour", m_LightCBs[0].Color);
+		ImGuiHelper::DragFloat4("Colour", m_LightCBs[0].Color, 100.0f, 0.01f, 0.0f, 1.0f);
 
 		ImGui::Spacing();
 
@@ -2042,16 +1890,6 @@ Descriptor* App::GetDepthStencilBufferView(int iIndex)
 	return m_FrameResources[iIndex].m_pDepthStencilBufferView;
 }
 
-Descriptor** App::GetGBufferRTVDescs()
-{
-	return m_FrameResources[m_uiFrameIndex].m_pGBufferRTVDescs;
-}
-
-Descriptor** App::GetGBufferRTVDescs(int iIndex)
-{
-	return m_FrameResources[iIndex].m_pGBufferRTVDescs;
-}
-
 void App::SetDepthStencilBufferView(int iIndex, Descriptor* pDesc)
 {
 	if (m_FrameResources[iIndex].m_pDepthStencilBufferView != nullptr)
@@ -2064,13 +1902,17 @@ void App::SetDepthStencilBufferView(int iIndex, Descriptor* pDesc)
 
 bool App::CreateSignatures()
 {
-	//Deferred pass signatures
-	if (CreateGBufferSignature() == false)
+	if (CreateGlobalRootSignature() == false)
 	{
 		return false;
 	}
 
-	if (CreateLightSignature() == false)
+	if (CreateLocalRootSignature() == false)
+	{
+		return false;
+	}
+
+	if (CreateLightPassRootSignature() == false)
 	{
 		return false;
 	}
@@ -2078,83 +1920,449 @@ bool App::CreateSignatures()
 	return true;
 }
 
-bool App::CreateGBufferSignature()
+bool App::CreateGlobalRootSignature()
 {
-	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::GBufferPass::COUNT] = {};
+	D3D12_DESCRIPTOR_RANGE1 outputRanges[4] = {};
+
+	for (int i = 0; i < _countof(outputRanges); ++i)
+	{
+		outputRanges[i].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		outputRanges[i].NumDescriptors = 1;
+		outputRanges[i].BaseShaderRegister = i;
+		outputRanges[i].RegisterSpace = 0;
+		outputRanges[i].OffsetInDescriptorsFromTableStart = 0;
+	}
+
+	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::GlobalRootSignatureParams::COUNT] = {};
 
 	//SRV descriptors
-	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
-	slotRootParameter[DeferredPass::GBufferPass::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = s_kuiNumStandardDescriptorRanges;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = App::GetApp()->GetNumStandardDescriptorRanges();
+
+	//Acceleration structure
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].Descriptor.ShaderRegister = 0;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ACCELERATION_STRUCTURE].Descriptor.RegisterSpace = 200;
+
+	//G Buffer UAV targets
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::NORMAL].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::NORMAL].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::NORMAL].DescriptorTable.pDescriptorRanges = outputRanges;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::NORMAL].DescriptorTable.NumDescriptorRanges = 1;
+
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ALBEDO].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ALBEDO].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ALBEDO].DescriptorTable.pDescriptorRanges = &outputRanges[1];
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::ALBEDO].DescriptorTable.NumDescriptorRanges = 1;
+
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::DIRECT_LIGHT].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::DIRECT_LIGHT].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::DIRECT_LIGHT].DescriptorTable.pDescriptorRanges = &outputRanges[2];
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::DIRECT_LIGHT].DescriptorTable.NumDescriptorRanges = 1;
+
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::POSITION].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::POSITION].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::POSITION].DescriptorTable.pDescriptorRanges = &outputRanges[3];
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::POSITION].DescriptorTable.NumDescriptorRanges = 1;
 
 	//Scene per frame CB
-	slotRootParameter[DeferredPass::GBufferPass::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[DeferredPass::GBufferPass::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::GBufferPass::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[DeferredPass::GBufferPass::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
-	slotRootParameter[DeferredPass::GBufferPass::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
-	//Primitive index CB
-	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].Descriptor.ShaderRegister = 1;
-	slotRootParameter[DeferredPass::GBufferPass::PRIMITIVE_INDEX_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.ShaderRegister = 1;
+	slotRootParameter[DeferredPass::GlobalRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
 
-	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pGBufferRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pGlobalRootSignature.GetAddressOf());
 }
 
-bool App::CreateLightSignature()
+bool App::CreateLocalRootSignature()
 {
-	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::LightPass::COUNT] = {};
+	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::LocalRootSignatureParams::COUNT] = {};
 
-	//SRV descriptors
-	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
-	slotRootParameter[DeferredPass::LightPass::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = s_kuiNumStandardDescriptorRanges;
+	//Primitive instance index
+	slotRootParameter[DeferredPass::LocalRootSignatureParams::INDEX].Constants.Num32BitValues = ceil(sizeof(PrimitiveIndexCB) / sizeof(UINT32));
+	slotRootParameter[DeferredPass::LocalRootSignatureParams::INDEX].Constants.ShaderRegister = 2;
+	slotRootParameter[DeferredPass::LocalRootSignatureParams::INDEX].Constants.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::LocalRootSignatureParams::INDEX].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	slotRootParameter[DeferredPass::LocalRootSignatureParams::INDEX].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-	//Scene per frame CB
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), nullptr, 0, m_pLocalRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_LOCAL_ROOT_SIGNATURE);
+}
 
-	//Deferred per frame CB
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.ShaderRegister = 1;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_DEFERRED_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+bool App::CreateLightPassRootSignature()
+{
+	D3D12_ROOT_PARAMETER1 slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::COUNT] = {};
 
-	//Raytrace per frame CB
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.RegisterSpace = 0;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.ShaderRegister = 2;
-	slotRootParameter[DeferredPass::LightPass::PER_FRAME_RAYTRACE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+	//Primitive instance index
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::STANDARD_DESCRIPTORS].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::STANDARD_DESCRIPTORS].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.pDescriptorRanges = DXRHelper::GetDescriptorRanges();
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::STANDARD_DESCRIPTORS].DescriptorTable.NumDescriptorRanges = App::GetApp()->GetNumStandardDescriptorRanges();
+
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.ShaderRegister = 0;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_SCENE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB].Descriptor.ShaderRegister = 1;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_DEFERRED_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
+
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.RegisterSpace = 0;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.ShaderRegister = 2;
+	slotRootParameter[DeferredPass::LightPass::LightPassRootSignatureParams::PER_FRAME_RAYTRACE_CB].Descriptor.Flags = D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC_WHILE_SET_AT_EXECUTE;
 
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> staticSamplers = DXRHelper::GetStaticSamplers();
 
-	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pLightRootSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+	return DXRHelper::CreateRootSignature((D3D12_ROOT_PARAMETER1*)slotRootParameter, (int)_countof(slotRootParameter), staticSamplers.data(), (int)staticSamplers.size(), m_pLightPassSignature.GetAddressOf(), D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+}
+
+bool App::CreateStateObject()
+{
+	CD3DX12_STATE_OBJECT_DESC pipelineDesc = CD3DX12_STATE_OBJECT_DESC(D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE);
+
+	//Associate shaders with pipeline and create hit groups
+	AssociateShader(m_wsGBufferRayGenName, m_wsGBufferRayGenName, pipelineDesc);
+
+	AssociateShader(m_wsGBufferMissName, m_wsGBufferMissName, pipelineDesc);
+
+	for (int i = 0; i < (int)DeferredPass::ShaderVersions::COUNT; ++i)
+	{
+		AssociateShader(m_GBufferHitNames[i], m_GBufferHitNames[i], pipelineDesc);
+		CreateHitGroup(m_GBufferHitNames[i], m_GBufferHitGroupNames[i], pipelineDesc);
+	}
+
+	//Do shader config stuff
+	CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT* pShaderConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_SHADER_CONFIG_SUBOBJECT>();
+	pShaderConfig->Config(sizeof(XMFLOAT4) * 3, sizeof(XMFLOAT2));
+
+	//Set root signatures
+
+	//Local
+	CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT* pLocalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_LOCAL_ROOT_SIGNATURE_SUBOBJECT>();
+	pLocalRootSignature->SetRootSignature(m_pLocalRootSignature.Get());
+
+	CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT* pAssociation = pipelineDesc.CreateSubobject<CD3DX12_SUBOBJECT_TO_EXPORTS_ASSOCIATION_SUBOBJECT>();
+	pAssociation->SetSubobjectToAssociate(*pLocalRootSignature);
+
+	for (int i = 0; i < (int)DeferredPass::ShaderVersions::COUNT; ++i)
+	{
+		pAssociation->AddExport(m_GBufferHitGroupNames[i]);
+	}
+
+	//Global
+	CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT* pGlobalRootSignature = pipelineDesc.CreateSubobject<CD3DX12_GLOBAL_ROOT_SIGNATURE_SUBOBJECT>();
+	pGlobalRootSignature->SetRootSignature(m_pGlobalRootSignature.Get());
+
+	//Do pipeline config
+	CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT* pPipelineConfig = pipelineDesc.CreateSubobject<CD3DX12_RAYTRACING_PIPELINE_CONFIG_SUBOBJECT>();
+	pPipelineConfig->Config(1);
+
+	HRESULT hr = ((ID3D12Device5*)App::GetApp()->GetDevice())->CreateStateObject(pipelineDesc, IID_PPV_ARGS(&m_pStateObject));
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to create the raytracing pipeline object!");
+
+		return false;
+	}
+
+	hr = m_pStateObject.As(&m_pStateObjectProps);
+
+	if (FAILED(hr))
+	{
+		LOG_ERROR(tag, L"Failed to get raytracing pipeline properties from object!");
+
+		return false;
+	}
+
+	return true;
+}
+
+bool App::CreateShaderTables()
+{
+	if (CreateRayGenShaderTable() == false)
+	{
+		return false;
+	}
+
+	if (CreateMissShaderTable() == false)
+	{
+		return false;
+	}
+
+	if (CreateHitGroupShaderTable() == false)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool App::CreateRayGenShaderTable()
+{
+	void* pRayGenIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_wsGBufferRayGenName);
+
+	ShaderTable shaderTable = ShaderTable(App::GetApp()->GetDevice(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pRayGenIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	{
+		LOG_ERROR(tag, L"Failed to add a ray gen shader record!");
+
+		return false;
+	}
+
+	m_pRayGenTable = shaderTable.GetBuffer();
+	m_uiRayGenRecordSize = shaderTable.GetRecordSize();
+
+	return true;
+}
+
+bool App::CreateMissShaderTable()
+{
+	void* pMissIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_wsGBufferMissName);
+
+	ShaderTable shaderTable = ShaderTable(App::GetApp()->GetDevice(), 1, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+
+	if (shaderTable.AddRecord(ShaderRecord(nullptr, 0, pMissIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+	{
+		LOG_ERROR(tag, L"Failed to add a miss shader record!");
+
+		return false;
+	}
+
+	m_pMissTable = shaderTable.GetBuffer();
+	m_uiMissRecordSize = shaderTable.GetRecordSize();
+
+	return true;
+}
+
+bool App::CreateHitGroupShaderTable()
+{
+	void* pHitGroupIdentifier = nullptr;
+
+	struct HitGroupRootArgs
+	{
+		PrimitiveIndexCB IndexCB;
+	};
+
+	HitGroupRootArgs hitGroupRootArgs;
+
+	ShaderTable hitGroupTable = ShaderTable(App::GetApp()->GetDevice(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES + sizeof(HitGroupRootArgs));
+
+	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
+
+	const MeshNode* pNode;
+	Mesh* pMesh;
+
+	UINT uiNumPrimitives = 0;
+
+	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
+	{
+		if (it->second->IsRaytraced() == false)
+		{
+			continue;
+		}
+
+		pMesh = it->second->GetMesh();
+
+		uiNumPrimitives = 0;
+
+		for (int i = 0; i < pMesh->GetNodes()->size(); ++i)
+		{
+			pNode = pMesh->GetNode(i);
+
+			//Assign per primitive information
+			for (int i = 0; i < pNode->m_Primitives.size(); ++i)
+			{
+				hitGroupRootArgs.IndexCB.InstanceIndex = it->second->GetIndex() + uiNumPrimitives;
+				hitGroupRootArgs.IndexCB.PrimitiveIndex = pNode->m_Primitives[i]->m_iIndex;
+
+				++uiNumPrimitives;
+
+				switch (pNode->m_Primitives[i]->m_Attributes)
+				{
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::EMISSIVE | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_EMISSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::NORMAL_OCCLUSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::NORMAL | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::NORMAL_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::OCCLUSION | PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::OCCLUSION_ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::ALBEDO | PrimitiveAttributes::METALLIC_ROUGHNESS:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::ALBEDO_METALLIC_ROUGHNESS]);
+					break;
+
+				case PrimitiveAttributes::ALBEDO:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::ALBEDO]);
+					break;
+
+				default:
+					pHitGroupIdentifier = m_pStateObjectProps->GetShaderIdentifier(m_GBufferHitGroupNames[(int)DeferredPass::ShaderVersions::NOTHING]);
+					break;
+				}
+
+				if (hitGroupTable.AddRecord(ShaderRecord(&hitGroupRootArgs, sizeof(HitGroupRootArgs), pHitGroupIdentifier, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES)) == false)
+				{
+					LOG_ERROR(tag, L"Failed to add a hit group shader record!");
+
+					return false;
+				}
+			}
+		}
+	}
+
+	m_pHitGroupTable = hitGroupTable.GetBuffer();
+	m_uiHitGroupRecordSize = hitGroupTable.GetRecordSize();
+
+	return true;
+}
+
+bool App::CreateAccelerationStructures()
+{
+	ResetCommandList();
+
+	if (MeshManager::GetInstance()->CreateBLAS(App::GetApp()->GetGraphicsCommandList(), App::GetApp()->GetDevice()) == false)
+	{
+		return false;
+	}
+
+	if (CreateTLAS(false) == false)
+	{
+		return false;
+	}
+
+	ExecuteCommandList();
+
+	return true;
+}
+
+bool App::CreateTLAS(bool bUpdate)
+{
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE;
+	inputs.NumDescs = MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives();
+	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL;
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info;
+	m_pDevice->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &info);
+
+	if (bUpdate == true)
+	{
+		m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
+	}
+	else
+	{
+		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ScratchDataSizeInBytes, m_TopLevelBuffer.m_pScratch.GetAddressOf(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) == false)
+		{
+			LOG_ERROR(tag, L"Failed to create the top level acceleration structure scratch buffer!");
+
+			return false;
+		}
+
+		if (DXRHelper::CreateUAVBuffer(m_pDevice.Get(), info.ResultDataMaxSizeInBytes, m_TopLevelBuffer.m_pResult.GetAddressOf(), D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE) == false)
+		{
+			LOG_ERROR(tag, L"Failed to create the top level acceleration structure result buffer!");
+
+			return false;
+		}
+
+		m_TopLevelBuffer.m_pInstanceDesc = new UploadBuffer<D3D12_RAYTRACING_INSTANCE_DESC>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActiveRaytracedPrimitives(), false);
+	}
+
+	inputs.InstanceDescs = m_TopLevelBuffer.m_pInstanceDesc->GetBufferGPUAddress();
+
+	int iCount = 0;
+
+	std::vector<MeshNode*>* pMeshNodes;
+
+	XMFLOAT3X4 world;
+
+	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
+	{
+		if (it->second->IsRaytraced() == false)
+		{
+			continue;
+		}
+
+		pMeshNodes = it->second->GetMesh()->GetNodes();
+
+		for (int i = 0; i < pMeshNodes->size(); ++i)
+		{
+			for (int j = 0; j < pMeshNodes->at(i)->m_Primitives.size(); ++j)
+			{
+				D3D12_RAYTRACING_INSTANCE_DESC instanceDesc = {};
+
+				XMStoreFloat3x4(&world, XMMatrixMultiply(XMLoadFloat4x4(&pMeshNodes->at(i)->m_Transform), XMLoadFloat4x4(&it->second->GetWorldMatrix())));
+
+				for (int j = 0; j < 3; ++j)
+				{
+					for (int k = 0; k < 4; ++k)
+					{
+						instanceDesc.Transform[j][k] = world.m[j][k];
+					}
+				}
+
+				instanceDesc.AccelerationStructure = pMeshNodes->at(i)->m_Primitives[j]->m_BottomLevel.m_pResult->GetGPUVirtualAddress();
+				instanceDesc.Flags = 0;
+				instanceDesc.InstanceID = iCount;
+				instanceDesc.InstanceContributionToHitGroupIndex = iCount;
+				instanceDesc.InstanceMask = 0xFF;
+
+				m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
+
+				++iCount;
+			}
+		}
+	}
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {};
+	buildDesc.Inputs = inputs;
+	buildDesc.DestAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
+	buildDesc.ScratchAccelerationStructureData = m_TopLevelBuffer.m_pScratch->GetGPUVirtualAddress();
+
+	if (bUpdate == true)
+	{
+		buildDesc.SourceAccelerationStructureData = m_TopLevelBuffer.m_pResult->GetGPUVirtualAddress();
+
+		buildDesc.Inputs.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+	}
+
+	m_pGraphicsCommandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	m_pGraphicsCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::UAV(m_TopLevelBuffer.m_pResult.Get()));
+
+	return true;
 }
 
 void App::PopulateDescriptorHeaps()
 {
-	//Create output descriptor
-	UINT uiDescIndex;
-	
-	if (m_pSRVHeap->Allocate(uiDescIndex) == false)
-	{
-		return;
-	}
-
-	m_pRaytracingOutput->CreateUAVDesc(m_pSRVHeap);
-
 	Texture** GBuffer;
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
@@ -2164,6 +2372,7 @@ void App::PopulateDescriptorHeaps()
 		for (int j = 0; j < (int)GBuffer::COUNT; ++j)
 		{
 			GBuffer[j]->CreateSRVDesc(m_pSRVHeap);
+			GBuffer[j]->CreateUAVDesc(m_pSRVHeap);
 		}
 
 		GetDepthStencilBuffer(i)->CreateSRVDesc(m_pSRVHeap, m_DepthStencilSRVFormat);
@@ -2243,10 +2452,10 @@ void App::PopulateDeferredPerFrameCB()
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
-		deferredPerFrameCB.NormalIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::NORMAL]->GetSRVDesc()->GetDescriptorIndex();
 		deferredPerFrameCB.AlbedoIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::ALBEDO]->GetSRVDesc()->GetDescriptorIndex();
-		deferredPerFrameCB.MetallicRoughnessOcclusion = m_FrameResources[i].m_GBuffer[(int)GBuffer::METALLIC_ROUGHNESS_OCCLUSION]->GetSRVDesc()->GetDescriptorIndex();
-		deferredPerFrameCB.DepthIndex = m_FrameResources[i].m_pDepthStencilBuffer->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.DirectLightIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::DIRECT_LIGHT]->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.NormalIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::NORMAL]->GetSRVDesc()->GetDescriptorIndex();
+		deferredPerFrameCB.PositionIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::POSITION]->GetSRVDesc()->GetDescriptorIndex();
 
 		GetDeferredPerFrameUploadBuffer(i)->CopyData(0, deferredPerFrameCB);
 	}
@@ -2277,7 +2486,7 @@ bool App::CreateDescriptorHeaps()
 	m_pSRVHeap = new DescriptorHeap();
 
 	//2 descriptors per primitive (index and vertex buffers), 1 descriptor per texture, 1 extra descriptor for output texture, 2 extra per in flight frame for structured buffers and 1 extra for primitive instance structured buffer, 4 extra per in flight frame for G Buffer, 1 extra per in flight frame for depth buffer, 8 for Global illumination
-	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 30) == false)
+	if (m_pSRVHeap->Init(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE, (MeshManager::GetInstance()->GetNumPrimitives() * 2) + TextureManager::GetInstance()->GetNumTextures() + 40) == false)
 	{
 		return false;
 	}
