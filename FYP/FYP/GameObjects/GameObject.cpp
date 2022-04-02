@@ -53,30 +53,6 @@ void GameObject::Destroy()
 	ObjectManager::GetInstance()->RemoveGameObject(m_sName);
 }
 
-void GameObject::CreateRenderInfo(std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>& renderInfos)
-{
-	RenderInfo renderInfo;
-	renderInfo.m_pVertexBuffer = m_pMesh->GetVertexUploadBuffer();
-	renderInfo.m_pIndexBuffer = m_pMesh->GetIndexUploadBuffer();
-
-	UINT uiPrimitiveCount = 0;
-
-	for (int i = 0; i < m_pMesh->GetNodes()->size(); ++i)
-	{
-		for (int j = 0; j < m_pMesh->GetNode(i)->m_Primitives.size(); ++j)
-		{
-			renderInfo.m_pPrimitive = m_pMesh->GetNode(i)->m_Primitives[j];
-
-			renderInfo.m_uiInstanceIndex = m_uiIndex + uiPrimitiveCount;
-			renderInfo.m_uiPrimitiveIndex = renderInfo.m_pPrimitive->m_iIndex;
-
-			++uiPrimitiveCount;
-
-			renderInfos[renderInfo.m_pPrimitive->m_Attributes].push_back(renderInfo);
-		}
-	}
-}
-
 std::string GameObject::GetName() const
 {
 	return m_sName;

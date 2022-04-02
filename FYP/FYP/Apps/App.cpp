@@ -440,10 +440,6 @@ void App::Draw()
 
 		GPU_PROFILE_BEGIN(GpuStats::FULL_FRAME, m_pGraphicsCommandList)
 
-		PopulateRenderInfoQueue();
-
-		PopulatePrimitiveIndexCB();
-
 		std::vector<ID3D12DescriptorHeap*> heaps = { m_pSRVHeap->GetHeap().Get() };
 		m_pGraphicsCommandList->SetDescriptorHeaps(static_cast<UINT>(heaps.size()), heaps.data());
 
@@ -1375,7 +1371,6 @@ void App::CreateCBs()
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		m_FrameResources[i].m_pGameObjectPerFrameCBUpload = new UploadBuffer<GameObjectPerFrameCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), false);
-		m_FrameResources[i].m_pPrimitiveIndexCBUpload = new UploadBuffer<PrimitiveIndexCB>(m_pDevice.Get(), MeshManager::GetInstance()->GetNumActivePrimitives(), true);
 		m_FrameResources[i].m_pLightCBUpload = new UploadBuffer<LightCB>(m_pDevice.Get(), MAX_LIGHTS, false);
 		m_FrameResources[i].m_pDeferredPerFrameCBUpload = new UploadBuffer<DeferredPerFrameCB>(m_pDevice.Get(), 1, true);
 
@@ -1829,16 +1824,6 @@ UploadBuffer<LightCB>* App::GetLightUploadBuffer()
 UploadBuffer<LightCB>* App::GetLightUploadBuffer(int iIndex)
 {
 	return m_FrameResources[iIndex].m_pLightCBUpload;
-}
-
-UploadBuffer<PrimitiveIndexCB>* App::GetPrimitiveIndexUploadBuffer()
-{
-	return m_FrameResources[m_uiFrameIndex].m_pPrimitiveIndexCBUpload;
-}
-
-UploadBuffer<PrimitiveIndexCB>* App::GetPrimitiveIndexUploadBuffer(int iIndex)
-{
-	return m_FrameResources[iIndex].m_pPrimitiveIndexCBUpload;
 }
 
 UploadBuffer<DeferredPerFrameCB>* App::GetDeferredPerFrameUploadBuffer()
@@ -2424,24 +2409,6 @@ void App::PopulatePrimitivePerInstanceCB()
 	}
 }
 
-void App::PopulatePrimitiveIndexCB()
-{
-	PROFILE("Populate Primitive Index");
-
-	PrimitiveIndexCB primIndexCB;
-
-	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
-	{
-		for (int i = 0; i < it->second.size(); ++i)
-		{
-			primIndexCB.InstanceIndex = (UINT32)it->second[i].m_uiInstanceIndex;
-			primIndexCB.PrimitiveIndex = (UINT32)it->second[i].m_uiPrimitiveIndex;
-
-			GetPrimitiveIndexUploadBuffer()->CopyData(primIndexCB.InstanceIndex, primIndexCB);
-		}
-	}
-}
-
 void App::PopulateDeferredPerFrameCB()
 {
 	DeferredPerFrameCB deferredPerFrameCB;
@@ -2454,26 +2421,6 @@ void App::PopulateDeferredPerFrameCB()
 		deferredPerFrameCB.PositionIndex = m_FrameResources[i].m_GBuffer[(int)GBuffer::POSITION]->GetSRVDesc()->GetDescriptorIndex();
 
 		GetDeferredPerFrameUploadBuffer(i)->CopyData(0, deferredPerFrameCB);
-	}
-}
-
-void App::PopulateRenderInfoQueue()
-{
-	PROFILE("Populate Render Info");
-
-	for (std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>::iterator it = m_RenderInfoQueue.begin(); it != m_RenderInfoQueue.end(); ++it)
-	{
-		it->second.clear();
-	}
-
-	std::unordered_map<std::string, GameObject*>* pGameObjects = ObjectManager::GetInstance()->GetGameObjects();
-
-	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
-	{
-		if (it->second->IsRendering() == true)
-		{
-			it->second->CreateRenderInfo(m_RenderInfoQueue);
-		}
 	}
 }
 

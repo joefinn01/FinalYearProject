@@ -47,7 +47,6 @@ struct FrameResources
 
 	UploadBuffer<GameObjectPerFrameCB>* m_pGameObjectPerFrameCBUpload = nullptr;
 	UploadBuffer<LightCB>* m_pLightCBUpload = nullptr;
-	UploadBuffer<PrimitiveIndexCB>* m_pPrimitiveIndexCBUpload = nullptr;
 	UploadBuffer<DeferredPerFrameCB>* m_pDeferredPerFrameCBUpload = nullptr;
 
 	Texture* m_GBuffer[(int)GBuffer::COUNT];
@@ -133,15 +132,6 @@ namespace DeferredPass
 
 }
 
-struct RenderInfo
-{
-	Primitive* m_pPrimitive;
-	UploadBuffer<Vertex>* m_pVertexBuffer;
-	UploadBuffer<UINT>* m_pIndexBuffer;
-	UINT m_uiInstanceIndex;
-	UINT m_uiPrimitiveIndex;
-};
-
 class App
 {
 public:
@@ -226,10 +216,7 @@ protected:
 
 	void PopulateDescriptorHeaps();
 	void PopulatePrimitivePerInstanceCB();
-	void PopulatePrimitiveIndexCB();
 	void PopulateDeferredPerFrameCB();
-
-	void PopulateRenderInfoQueue();
 
 	bool CheckRaytracingSupport();
 
@@ -418,8 +405,6 @@ protected:
 
 	D3D12_VIEWPORT m_Viewport = D3D12_VIEWPORT();
 	D3D12_RECT m_ScissorRect = D3D12_RECT();
-
-	std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>> m_RenderInfoQueue;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferGPU = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_pScreenQuadVertexBufferUploader = nullptr;

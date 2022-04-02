@@ -32,7 +32,6 @@ public:
 	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bRaytrace = true);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
-	virtual void CreateRenderInfo(std::unordered_map<PrimitiveAttributes, std::vector<RenderInfo>>& renderInfos);
 
 	std::string GetName() const;
 
