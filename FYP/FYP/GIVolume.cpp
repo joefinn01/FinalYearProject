@@ -752,11 +752,6 @@ bool GIVolume::CreateHitGroupShaderTable()
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
 		pMesh = it->second->GetMesh();
 
 		uiNumPrimitives = 0;

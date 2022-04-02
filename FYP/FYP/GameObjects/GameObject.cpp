@@ -15,7 +15,7 @@ GameObject::~GameObject()
 {
 }
 
-bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bRaytrace)
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bContributeGI)
 {
 	m_sName = sName;
 
@@ -31,14 +31,10 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 	ObjectManager::GetInstance()->AddGameObject(this, m_uiIndex);
 	MeshManager::GetInstance()->AddNumActivePrimitives(m_pMesh->GetNumPrimitives());
+	MeshManager::GetInstance()->AddNumActiveRaytracedPrimitives(m_pMesh->GetNumPrimitives());
 
 	m_bRender = bRender;
-	m_bRaytrace = bRaytrace;
-
-	if (m_bRaytrace == true)
-	{
-		MeshManager::GetInstance()->AddNumActiveRaytracedPrimitives(m_pMesh->GetNumPrimitives());
-	}
+	m_bContrinuteGI = bContributeGI;
 
 	return true;
 }
@@ -264,9 +260,9 @@ bool GameObject::IsRendering()
 	return m_bRender;
 }
 
-bool GameObject::IsRaytraced()
+bool GameObject::IsContributeGI()
 {
-	return m_bRaytrace;
+	return m_bContrinuteGI;
 }
 
 void GameObject::SetIsRendering(bool bRender)
@@ -274,9 +270,9 @@ void GameObject::SetIsRendering(bool bRender)
 	m_bRender = bRender;
 }
 
-void GameObject::SetIsRaytracing(bool bRaytrace)
+void GameObject::SetIsContributeGI(bool bContribute)
 {
-	m_bRaytrace = bRaytrace;
+	m_bContrinuteGI = bContribute;
 }
 
 void GameObject::UpdateAxisVectors()

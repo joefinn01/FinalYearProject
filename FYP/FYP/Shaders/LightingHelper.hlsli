@@ -49,7 +49,7 @@ float CheckLightVisibility(Payload payload, float maxDistance, float3 lightVec)
     
     PackedPayload packedPayload = (PackedPayload) 0;
     
-    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 1, 0, ray, packedPayload);
+    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, CONTRIBUTE_GI, 0, 1, 0, ray, packedPayload);
 
     return packedPayload.HitDistance < 0.0f;
 }

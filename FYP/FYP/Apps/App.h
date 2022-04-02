@@ -40,6 +40,14 @@ enum class GBuffer
 	COUNT
 };
 
+enum class TlasMask
+{
+	CONTRIBUTE_GI = 1,
+	RAYTRACE = 2
+};
+
+DEFINE_ENUM_FLAG_OPERATORS(TlasMask);
+
 struct FrameResources
 {
 	Microsoft::WRL::ComPtr<ID3D12CommandAllocator> m_pCommandAllocator = nullptr;

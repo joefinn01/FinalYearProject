@@ -29,7 +29,7 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bRaytrace = true);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bContributeGI = true);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -77,10 +77,10 @@ public:
 	UINT GetIndex();
 
 	bool IsRendering();
-	bool IsRaytraced();
+	bool IsContributeGI();
 
 	void SetIsRendering(bool bRender);
-	void SetIsRaytracing(bool bRaytrace);
+	void SetIsContributeGI(bool bContribute);
 
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
@@ -98,7 +98,7 @@ private:
 	DirectX::XMFLOAT4 m_Right = DirectX::XMFLOAT4(1, 0, 0, 0);
 
 	bool m_bRender = true;
-	bool m_bRaytrace = true;
+	bool m_bContrinuteGI = true;
 
 	Mesh* m_pMesh = nullptr;
 

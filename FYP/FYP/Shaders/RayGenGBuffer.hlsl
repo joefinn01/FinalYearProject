@@ -22,7 +22,7 @@ void GBufferRayGen()
     ray.TMax = 1e27f;
     
     PackedPayload packedPayload = (PackedPayload) 0;
-    TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, 0, 1, 0, ray, packedPayload);
+    TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, RAYTRACE, 0, 1, 0, ray, packedPayload);
 
     //Missed so exit
     if(packedPayload.HitDistance < 0.0f)

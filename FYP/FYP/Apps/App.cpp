@@ -276,6 +276,9 @@ void App::Update(const Timer& kTimer)
 
 	ObjectManager::GetInstance()->Update(kTimer);
 
+	m_pLight->SetIsRendering((bool)m_LightCBs[0].Enabled);
+	m_pLight->SetPosition(m_LightCBs[0].Position);
+
 	m_pGIVolume->SetAnchorPosition(ObjectManager::GetInstance()->GetActiveCamera()->GetPosition());
 
 	m_pGIVolume->Update(kTimer);
@@ -2156,11 +2159,6 @@ bool App::CreateHitGroupShaderTable()
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = pGameObjects->begin(); it != pGameObjects->end(); ++it)
 	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
 		pMesh = it->second->GetMesh();
 
 		uiNumPrimitives = 0;
@@ -2287,11 +2285,6 @@ bool App::CreateTLAS(bool bUpdate)
 
 	for (std::unordered_map<std::string, GameObject*>::iterator it = ObjectManager::GetInstance()->GetGameObjects()->begin(); it != ObjectManager::GetInstance()->GetGameObjects()->end(); ++it)
 	{
-		if (it->second->IsRaytraced() == false)
-		{
-			continue;
-		}
-
 		pMeshNodes = it->second->GetMesh()->GetNodes();
 
 		for (int i = 0; i < pMeshNodes->size(); ++i)
@@ -2314,7 +2307,17 @@ bool App::CreateTLAS(bool bUpdate)
 				instanceDesc.Flags = 0;
 				instanceDesc.InstanceID = iCount;
 				instanceDesc.InstanceContributionToHitGroupIndex = iCount;
-				instanceDesc.InstanceMask = 0xFF;
+				instanceDesc.InstanceMask = 0;
+
+				if (it->second->IsRendering() == true)
+				{
+					instanceDesc.InstanceMask |= (int)TlasMask::RAYTRACE;
+				}
+
+				if (it->second->IsContributeGI() == true)
+				{
+					instanceDesc.InstanceMask |= (int)TlasMask::CONTRIBUTE_GI;
+				}
 
 				m_TopLevelBuffer.m_pInstanceDesc->CopyData(iCount, instanceDesc);
 

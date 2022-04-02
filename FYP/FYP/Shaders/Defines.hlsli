@@ -10,6 +10,9 @@
 #define DIRECTIONAL_LIGHT 0
 #define POINT_LIGHT 1
 
+#define CONTRIBUTE_GI 1
+#define RAYTRACE 2
+
 static const float PI = 3.14159265f;
 
 #endif

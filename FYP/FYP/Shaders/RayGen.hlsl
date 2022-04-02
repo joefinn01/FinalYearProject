@@ -33,7 +33,7 @@ void RayGen()
     
     PackedPayload packedPayload = (PackedPayload)0;
     
-    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 1, 0, ray, packedPayload);
+    TraceRay(Scene, RAY_FLAG_NONE, CONTRIBUTE_GI, 0, 1, 0, ray, packedPayload);
 
     if (packedPayload.HitDistance < 0.0f)   //If missed
     {
