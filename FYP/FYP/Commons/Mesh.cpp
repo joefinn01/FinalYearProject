@@ -16,6 +16,9 @@ Mesh::Mesh()
 
 	m_uiNumIndices = 0;
 	m_uiNumVertices = 0;
+
+	m_sFilePath = "";
+	m_sName = "";
 }
 
 bool Mesh::CreateBLAS(ID3D12GraphicsCommandList4*& pGraphicsCommandList, ID3D12Device5*& pDevice)
@@ -81,4 +84,9 @@ UINT Mesh::GetNumIndices() const
 UINT Mesh::GetNumPrimitives() const
 {
 	return m_uiNumPrimitives;
+}
+
+std::string Mesh::GetName() const
+{
+	return m_sName;
 }

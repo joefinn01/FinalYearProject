@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Helpers/MathHelper.h"
+#include "Include/json/json.hpp"
 
 #include <string>
 
@@ -36,6 +37,8 @@ public:
 	std::string GetName() const;
 
 	void Reshape(float fNearDepth, float fFarDepth);
+
+	virtual void Save(nlohmann::json& data);
 
 protected:
 	DirectX::XMFLOAT3 m_Eye = DirectX::XMFLOAT3();

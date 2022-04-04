@@ -1,5 +1,6 @@
 #pragma once
 #include "Commons\Singleton.h"
+#include "Include/json/json.hpp"
 
 #include <string>
 #include <unordered_map>
@@ -38,6 +39,8 @@ public:
 	Camera* GetCamera(const std::string& ksName) const;
 
 	void Update(const Timer& kTimer);
+
+	void Save(nlohmann::json& data);
 
 protected:
 

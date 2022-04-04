@@ -24,6 +24,7 @@
 #include "Include/ImGui/imgui_impl_dx12.h"
 #include "Include/ImGui/imgui_impl_win32.h"
 #include "Include/ImGui/imgui.h"
+#include "Include/json/json.hpp"
 #include "GIVolume.h"
 
 #if PIX
@@ -35,6 +36,7 @@
 
 #include <vector>
 #include <queue>
+#include <fstream>
 
 using namespace Microsoft::WRL;
 using namespace DirectX;
@@ -66,7 +68,7 @@ App::~App()
 {
 }
 
-bool App::Init()
+bool App::Init(const std::string& ksFilepath)
 {
 	UINT uiDXGIFactoryFlags = 0;
 	HRESULT hr;
@@ -159,7 +161,7 @@ bool App::Init()
 		return false;
 	}
 
-	CreateGeometry();
+	CreateGeometry(ksFilepath);
 
 	if (CreateDescriptorHeaps() == false)
 	{
@@ -189,7 +191,7 @@ bool App::Init()
 
 	CreateScreenQuad();
 
-	InitScene();
+	InitScene(ksFilepath);
 
 	if (CreateShaderTables() == false)
 	{
@@ -203,7 +205,7 @@ bool App::Init()
 
 	CreateCBs();
 
-	InitConstantBuffers();
+	InitConstantBuffers(ksFilepath);
 
 	PopulateDescriptorHeaps();
 
@@ -673,6 +675,34 @@ int App::Run()
 
 void App::Load()
 {
+}
+
+void App::Save(const std::string& sFileName)
+{
+	nlohmann::json data;
+
+	MeshManager::GetInstance()->Save(data);
+
+	ObjectManager::GetInstance()->Save(data);
+
+	m_pGIVolume->Save(data);
+
+	for (int i = 0; i < m_uiNumLights; ++i)
+	{
+		m_LightCBs[i].Save(data);
+	}
+
+	std::ofstream outFile(sFileName + ".json");
+
+	if (outFile.is_open() == false)
+	{
+		LOG_ERROR(tag, L"Failed to open file to save scene!");
+
+		return;
+	}
+
+	outFile << data;
+	outFile.close();
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -1258,7 +1288,7 @@ bool App::CompileShaders()
 	return true;
 }
 
-void App::CreateGeometry()
+void App::CreateGeometry(const std::string& ksFilepath)
 {
 	HRESULT hr = m_pGraphicsCommandList->Reset(GetCommandAllocator(), nullptr);
 
@@ -1269,9 +1299,17 @@ void App::CreateGeometry()
 		return;
 	}
 
-	MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Cornell", m_pGraphicsCommandList.Get());
-	MeshManager::GetInstance()->LoadMesh("Models/Sphere/gLTF/Sphere.gltf", "Sphere", m_pGraphicsCommandList.Get());
-	//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
+	//If no filepath specified then load hard coded scene
+	if (ksFilepath == "")
+	{
+		MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Cornell", m_pGraphicsCommandList.Get());
+		MeshManager::GetInstance()->LoadMesh("Models/Sphere/gLTF/Sphere.gltf", "Sphere", m_pGraphicsCommandList.Get());
+		//MeshManager::GetInstance()->LoadMesh("Models/Sponza/gLTF/Sponza.gltf", "Sponza", m_pGraphicsCommandList.Get());
+	}
+	else
+	{
+		MeshManager::GetInstance()->LoadScene(ksFilepath, m_pGraphicsCommandList.Get());
+	}
 
 	m_pGraphicsCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -1453,55 +1491,178 @@ void App::CreateScreenQuad()
 	ExecuteCommandList();
 }
 
-void App::InitScene()
+void App::InitScene(const std::string& ksFilepath)
 {
 	Mesh* pMesh = nullptr;
-	MeshManager::GetInstance()->GetMesh("Cornell", pMesh);
-	//MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
-
-	GameObject* pGameObject = new GameObject();
-	pGameObject->Init("Cornell", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
-
-	GIVolumeDesc volumeDesc;
-	volumeDesc.Position = XMFLOAT3(0, 1, 0);
-	volumeDesc.ProbeCounts = XMINT3(22, 22, 22);
-	volumeDesc.ProbeRelocation = false;
-	volumeDesc.ProbeScale = 0.1f;
-	volumeDesc.ProbeSpacing = XMFLOAT3(1.02f, 0.5f, 0.45f);
-	volumeDesc.ProbeTracking = false;
+	GameObject* pGameObject = nullptr;
 
 	MeshManager::GetInstance()->GetMesh("Sphere", pMesh);
 
 	m_pLight = new GameObject();
-	m_pLight->Init("Light", DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), XMFLOAT3(0.1f, 0.1f, 0.1f), pMesh, true, false);
+	m_pLight->Init("Light", DirectX::XMFLOAT3(0, 0, 0), DirectX::XMFLOAT3(0, 0, 0), XMFLOAT3(0.1f, 0.1f, 0.1f), pMesh, true, false, false);
 
-	m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
+	if (ksFilepath == "")
+	{
+		MeshManager::GetInstance()->GetMesh("Cornell", pMesh);
+		//MeshManager::GetInstance()->GetMesh("Sponza", pMesh);
 
-	CreateCameras();
+		pGameObject = new GameObject();
+		pGameObject->Init("Cornell", XMFLOAT3(0, 0, 0), XMFLOAT3(0, 0, 0), XMFLOAT3(1, 1, 1), pMesh);
+
+		GIVolumeDesc volumeDesc;
+		volumeDesc.Position = XMFLOAT3(0, 1, 0);
+		volumeDesc.ProbeCounts = XMINT3(22, 22, 22);
+		volumeDesc.ProbeRelocation = false;
+		volumeDesc.ProbeScale = 0.05f;
+		volumeDesc.ProbeSpacing = XMFLOAT3(1.02f, 0.5f, 0.45f);
+		volumeDesc.ProbeTracking = false;
+		volumeDesc.IrradianceTexelsPerProbe = 6;
+		volumeDesc.DistanceTexelsPerProbe = 14;
+		volumeDesc.GIAtlasSize = 1;
+		volumeDesc.ShowProbes = false;
+		volumeDesc.MaxRayDistance = 10000.0f;
+		volumeDesc.ViewBias = 0.1f;
+		volumeDesc.NormalBias = 0.02f;
+		volumeDesc.RaysPerProbe = 288;
+		volumeDesc.BrightnessThreshold = 2.0f;
+		volumeDesc.DistancePower = 50.0f;
+		volumeDesc.Hysteresis = 0.97f;
+		volumeDesc.IrradianceFormat = 1;
+		volumeDesc.IrradianceGammaEncoding = 5.0f;
+		volumeDesc.IrradianceThreshold = 0.2f;
+		volumeDesc.MissRadiance = DirectX::XMFLOAT3(0, 0, 0);
+		volumeDesc.ProbeOffsets = DirectX::XMINT3(0, 0, 0);
+		volumeDesc.Anchor = DirectX::XMFLOAT3(0, 0, 0);
+
+		m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
+
+		CreateCameras();
+	}
+	else
+	{
+		//Load in JSON data
+		std::ifstream inFile(ksFilepath);
+
+		if (inFile.is_open() == false)
+		{
+			LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+
+			return;
+		}
+
+		nlohmann::json data;
+		inFile >> data;
+
+		inFile.close();
+
+		//Create all gameobjects
+		for (int i = 0; i < data["GameObjects"]["Name"].size(); ++i)
+		{
+			MeshManager::GetInstance()->GetMesh(data["GameObjects"]["Mesh"][i], pMesh);
+
+			DirectX::XMFLOAT3 position = DirectX::XMFLOAT3(data["GameObjects"]["Position"][i][0], data["GameObjects"]["Position"][i][1], data["GameObjects"]["Position"][i][2]);
+			DirectX::XMFLOAT4 rotation = DirectX::XMFLOAT4(data["GameObjects"]["Rotation"][i][0], data["GameObjects"]["Rotation"][i][1], data["GameObjects"]["Rotation"][i][2], data["GameObjects"]["Rotation"][i][3]);
+			DirectX::XMFLOAT3 scale = DirectX::XMFLOAT3(data["GameObjects"]["Scale"][i][0], data["GameObjects"]["Scale"][i][1], data["GameObjects"]["Scale"][i][2]);
+
+			pGameObject = new GameObject();
+			pGameObject->Init(data["GameObjects"]["Name"][i], position, rotation, scale, pMesh, data["GameObjects"]["Render"][i], data["GameObjects"]["ContributeGI"][i]);
+		}
+
+		//Create camera
+		DirectX::XMFLOAT3 eye = DirectX::XMFLOAT3(data["Camera"]["Eye"][0][0], data["Camera"]["Eye"][0][1], data["Camera"]["Eye"][0][2]);
+		DirectX::XMFLOAT3 at = DirectX::XMFLOAT3(data["Camera"]["At"][0][0], data["Camera"]["At"][0][1], data["Camera"]["At"][0][2]);
+		DirectX::XMFLOAT3 up = DirectX::XMFLOAT3(data["Camera"]["Up"][0][0], data["Camera"]["Up"][0][1], data["Camera"]["Up"][0][2]);
+
+		Camera* pCamera = new DebugCamera(eye, at, up, data["Camera"]["NearDepth"][0], data["Camera"]["FarDepth"][0], data["Camera"]["Name"][0]);
+
+		ObjectManager::GetInstance()->AddCamera(pCamera);
+
+		ObjectManager::GetInstance()->SetActiveCamera(pCamera->GetName());
+
+		//Create GI volume
+		GIVolumeDesc volumeDesc;
+		volumeDesc.Position = XMFLOAT3(data["GIVolume"]["Position"][0][0], data["GIVolume"]["Position"][0][1], data["GIVolume"]["Position"][0][2]);
+		volumeDesc.ProbeCounts = XMINT3(data["GIVolume"]["ProbeCounts"][0][0], data["GIVolume"]["ProbeCounts"][0][1], data["GIVolume"]["ProbeCounts"][0][2]);
+		volumeDesc.ProbeRelocation = data["GIVolume"]["ProbeRelocation"][0];
+		volumeDesc.ProbeScale = data["GIVolume"]["ProbeScale"][0];
+		volumeDesc.ProbeSpacing = XMFLOAT3(data["GIVolume"]["ProbeSpacing"][0][0], data["GIVolume"]["ProbeSpacing"][0][1], data["GIVolume"]["ProbeSpacing"][0][2]);
+		volumeDesc.ProbeTracking = data["GIVolume"]["ProbeTracking"][0];
+		volumeDesc.IrradianceTexelsPerProbe = data["GIVolume"]["IrradianceTexelsPerProbe"][0];
+		volumeDesc.DistanceTexelsPerProbe = data["GIVolume"]["DistanceTexelsPerProbe"][0];
+		volumeDesc.GIAtlasSize = data["GIVolume"]["AtlasSize"][0];
+		volumeDesc.ShowProbes = data["GIVolume"]["ShowProbes"][0];
+		volumeDesc.MaxRayDistance = data["GIVolume"]["MaxRayDistance"][0];
+		volumeDesc.ViewBias = data["GIVolume"]["ViewBias"][0];
+		volumeDesc.NormalBias = data["GIVolume"]["NormalBias"][0];
+		volumeDesc.RaysPerProbe = data["GIVolume"]["RaysPerProbe"][0];
+		volumeDesc.BrightnessThreshold = data["GIVolume"]["BrightnessThreshold"][0];
+		volumeDesc.DistancePower = data["GIVolume"]["DistancePower"][0];
+		volumeDesc.Hysteresis = data["GIVolume"]["Hysteresis"][0];
+		volumeDesc.IrradianceFormat = data["GIVolume"]["IrradianceFormat"][0];
+		volumeDesc.IrradianceGammaEncoding = data["GIVolume"]["IrradianceGammaEncoding"][0];
+		volumeDesc.IrradianceThreshold = data["GIVolume"]["IrradianceThreshold"][0];
+		volumeDesc.MissRadiance = DirectX::XMFLOAT3(data["GIVolume"]["MissRadiance"][0][0], data["GIVolume"]["MissRadiance"][0][1], data["GIVolume"]["MissRadiance"][0][2]);
+		volumeDesc.ProbeOffsets = DirectX::XMINT3(data["GIVolume"]["ProbeOffsets"][0][0], data["GIVolume"]["ProbeOffsets"][0][1], data["GIVolume"]["ProbeOffsets"][0][2]);
+		volumeDesc.Anchor = DirectX::XMFLOAT3(data["GIVolume"]["AnchorPosition"][0][0], data["GIVolume"]["AnchorPosition"][0][1], data["GIVolume"]["AnchorPosition"][0][2]);
+
+		m_pGIVolume = new GIVolume(volumeDesc, m_pGraphicsCommandList.Get(), m_pSRVHeap, m_pRTVHeap);
+	}
 }
 
-void App::InitConstantBuffers()
+void App::InitConstantBuffers(const std::string& ksFilepath)
 {
 	for (UINT i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
 		UpdatePerFrameCB(i);
 	}
 
-	m_LightCBs[0].Position = XMFLOAT3(0, 1.9f, 0);
-	m_LightCBs[0].Type = LightType::POINT;
-	m_LightCBs[0].Color = XMFLOAT3(1, 1, 1);
-	m_LightCBs[0].Power = 1.0f;
-	m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
-	m_LightCBs[0].Enabled = false;
-	m_LightCBs[0].Range = 1000.0f;
+	if (ksFilepath == "")
+	{
+		m_LightCBs[0].Position = XMFLOAT3(0, 1.9f, 0);
+		m_LightCBs[0].Type = LightType::POINT;
+		m_LightCBs[0].Color = XMFLOAT3(1, 1, 1);
+		m_LightCBs[0].Power = 1.0f;
+		m_LightCBs[0].Attenuation = XMFLOAT3(0.2f, 0.09f, 0.0f);
+		m_LightCBs[0].Enabled = false;
+		m_LightCBs[0].Range = 1000.0f;
+
+		m_LightCBs[1].Type = LightType::DIRECTIONAL;
+		m_LightCBs[1].Color = XMFLOAT3(1, 1, 1);
+		m_LightCBs[1].Power = 1.45f;
+		m_LightCBs[1].Enabled = true;
+		m_LightCBs[1].Direction = XMFLOAT3(0, -1.0f, 0.3f);
+	}
+	else
+	{
+		//Load in JSON data
+		std::ifstream inFile(ksFilepath);
+
+		if (inFile.is_open() == false)
+		{
+			LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+
+			return;
+		}
+
+		nlohmann::json data;
+		inFile >> data;
+
+		inFile.close();
+
+		for (int i = 0; i < data["Lights"]["Position"].size(); ++i)
+		{
+			m_LightCBs[i].Position = XMFLOAT3(data["Lights"]["Position"][i][0], data["Lights"]["Position"][i][1], data["Lights"]["Position"][i][2]);
+			m_LightCBs[i].Type = (LightType)data["Lights"]["Type"][i];
+			m_LightCBs[i].Direction = XMFLOAT3(data["Lights"]["Direction"][i][0], data["Lights"]["Direction"][i][1], data["Lights"]["Direction"][i][2]);
+			m_LightCBs[i].Range = data["Lights"]["Range"][i];
+			m_LightCBs[i].Color = XMFLOAT3(data["Lights"]["Color"][i][0], data["Lights"]["Color"][i][1], data["Lights"]["Color"][i][2]);
+			m_LightCBs[i].Power = data["Lights"]["Power"][i];
+			m_LightCBs[i].Attenuation = XMFLOAT3(data["Lights"]["Attenuation"][i][0], data["Lights"]["Attenuation"][i][1], data["Lights"]["Attenuation"][i][2]);
+			m_LightCBs[i].Enabled = data["Lights"]["Enabled"][i];
+		}
+	}
 
 	m_pLight->SetPosition(m_LightCBs[0].Position);
-
-	m_LightCBs[1].Type = LightType::DIRECTIONAL;
-	m_LightCBs[1].Color = XMFLOAT3(1, 1, 1);
-	m_LightCBs[1].Power = 1.45f;
-	m_LightCBs[1].Enabled = true;
-	m_LightCBs[1].Direction = XMFLOAT3(0, -1.0f, 0.3f);
 
 	for (int i = 0; i < s_kuiSwapChainBufferCount; ++i)
 	{
@@ -1574,6 +1735,11 @@ void App::DrawImGui()
 	}
 
 	m_pGIVolume->ShowUI();
+
+	if (ImGui::Button("Save") == true)
+	{
+		Save("Test");
+	}
 
 	ImGui::End();
 

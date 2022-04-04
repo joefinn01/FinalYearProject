@@ -3,6 +3,7 @@
 #include "Helpers/MathHelper.h"
 #include "Commons/UploadBuffer.h"
 #include "Shaders/ConstantBuffers.h"
+#include "Include/json/json.hpp"
 
 #include <string>
 #include <unordered_map>
@@ -29,7 +30,8 @@ public:
 	GameObject();
 	~GameObject();
 
-	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bContributeGI = true);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bContributeGI = true, bool bSave = true);
+	virtual bool Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT4 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender = true, bool bContributeGI = true, bool bSave = true);
 	virtual void Update(const Timer& kTimer);
 	virtual void Destroy();
 
@@ -78,9 +80,13 @@ public:
 
 	bool IsRendering();
 	bool IsContributeGI();
+	bool IsSaved();
 
 	void SetIsRendering(bool bRender);
 	void SetIsContributeGI(bool bContribute);
+	void SetIsSaved(bool bSave);
+
+	void Save(nlohmann::json& data);
 
 protected:
 	GameObjectType m_eType = GameObjectType::BASE;
@@ -99,6 +105,7 @@ private:
 
 	bool m_bRender = true;
 	bool m_bContrinuteGI = true;
+	bool m_bSave = true;
 
 	Mesh* m_pMesh = nullptr;
 

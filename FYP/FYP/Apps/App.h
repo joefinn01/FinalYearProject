@@ -146,7 +146,7 @@ public:
 	App(HINSTANCE hInstance);
 	~App();
 
-	virtual bool Init();
+	virtual bool Init(const std::string& ksFilepath);
 
 #if PIX
 	static std::wstring GetPixGpuCapturePath();
@@ -164,6 +164,7 @@ public:
 	int Run();
 
 	virtual void Load();
+	virtual void Save(const std::string& sFileName);
 
 	virtual LRESULT MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -201,7 +202,7 @@ protected:
 
 	bool CompileShaders();
 
-	void CreateGeometry();
+	void CreateGeometry(const std::string& ksFilepath);
 
 	bool CreateOutputBuffers();
 
@@ -232,8 +233,8 @@ protected:
 
 	void CreateScreenQuad();
 
-	void InitScene();
-	void InitConstantBuffers();
+	void InitScene(const std::string& ksFilepath);
+	void InitConstantBuffers(const std::string& ksFilepath);
 
 	void InitImGui();
 	void UpdateImGui(const Timer& kTimer);

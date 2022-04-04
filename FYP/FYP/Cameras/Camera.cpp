@@ -113,3 +113,13 @@ void Camera::Reshape(float fNearDepth, float fFarDepth)
 
 	XMStoreFloat4x4(&m_Projection, XMMatrixPerspectiveFovLH(XM_PIDIV2, WindowManager::GetInstance()->GetAspectRatio(), m_fNearDepth, m_fFarDepth));
 }
+
+void Camera::Save(nlohmann::json& data)
+{
+	data["Camera"]["Name"].push_back(m_sName);
+	data["Camera"]["Eye"].push_back({m_Eye.x, m_Eye.y, m_Eye.z});
+	data["Camera"]["At"].push_back({ m_At.x, m_At.y, m_At.z});
+	data["Camera"]["Up"].push_back({ m_Up.x, m_Up.y, m_Up.z});
+	data["Camera"]["NearDepth"].push_back(m_fNearDepth);
+	data["Camera"]["FarDepth"].push_back(m_fFarDepth);
+}

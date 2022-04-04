@@ -64,6 +64,9 @@ bool MeshManager::LoadMesh(const std::string& sFilename, const std::string& sNam
 
 	Mesh* pMesh = new Mesh();
 
+	pMesh->m_sFilePath = sFilename;
+	pMesh->m_sName = sName;
+
 	if (!warn.empty()) 
 	{
 		LOG_WARNING(tag, L"%s", warn);
@@ -392,6 +395,38 @@ void MeshManager::AddNumActivePrimitives(UINT uiNumActivePrimitives)
 void MeshManager::AddNumActiveRaytracedPrimitives(UINT uiNumActiveRaytracedPrimitives)
 {
 	m_uiNumActiveRaytracedPrimitives += uiNumActiveRaytracedPrimitives;
+}
+
+void MeshManager::Save(nlohmann::json& data)
+{
+	for (std::unordered_map<std::string, Mesh*>::iterator it = m_Meshes.begin(); it != m_Meshes.end(); ++it)
+	{
+		data["Meshes"]["Name"].push_back(it->first);
+		data["Meshes"]["Filepath"].push_back(it->second->m_sFilePath);
+	}
+}
+
+void MeshManager::LoadScene(const std::string& ksFilepath, ID3D12GraphicsCommandList* pGraphicsCommandList)
+{
+	//Load in JSON data
+	std::ifstream inFile(ksFilepath);
+
+	if (inFile.is_open() == false)
+	{
+		LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+
+		return;
+	}
+
+	nlohmann::json data;
+	inFile >> data;
+
+	inFile.close();
+
+	for (int i = 0; i < data["Meshes"]["Name"].size(); ++i)
+	{
+		LoadMesh(data["Meshes"]["Filepath"][i], data["Meshes"]["Name"][i], pGraphicsCommandList);
+	}
 }
 
 bool MeshManager::LoadTextures(std::string sName, Mesh* pMesh, const tinygltf::Model kModel, ID3D12GraphicsCommandList* pGraphicsCommandList)

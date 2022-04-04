@@ -110,6 +110,19 @@ void ObjectManager::Update(const Timer& kTimer)
 	}
 }
 
+void ObjectManager::Save(nlohmann::json& data)
+{
+	for (std::unordered_map<std::string, GameObject*>::iterator it = m_GameObjects.begin(); it != m_GameObjects.end(); ++it)
+	{
+		if (it->second->IsSaved() == true)
+		{
+			it->second->Save(data);
+		}
+	}
+
+	m_pActiveCamera->Save(data);
+}
+
 void ObjectManager::SetActiveCamera(const std::string& ksName)
 {
 	if (m_Cameras.count(ksName) == 0)

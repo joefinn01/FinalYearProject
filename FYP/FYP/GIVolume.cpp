@@ -26,11 +26,29 @@ Tag tag = L"GIVolume";
 GIVolume::GIVolume(const GIVolumeDesc& kVolumeDesc, ID3D12GraphicsCommandList4* pCommandList, DescriptorHeap* pSRVHeap, DescriptorHeap* pRTVHeap)
 {
 	m_Position = kVolumeDesc.Position;
-	
 	m_ProbeCounts = kVolumeDesc.ProbeCounts;
-	m_ProbeSpacing = kVolumeDesc.ProbeSpacing;
-
 	m_bProbeRelocation = kVolumeDesc.ProbeRelocation;
+	m_ProbeScale = kVolumeDesc.ProbeScale;
+	m_ProbeSpacing = kVolumeDesc.ProbeSpacing;
+	m_bProbeTracking = kVolumeDesc.ProbeTracking;
+	m_iIrradianceTexelsPerProbe = kVolumeDesc.IrradianceTexelsPerProbe;
+	m_iDistanceTexelsPerProbe = kVolumeDesc.DistanceTexelsPerProbe;
+	m_AtlasSize = (AtlasSize)kVolumeDesc.GIAtlasSize;
+	m_bShowProbes = kVolumeDesc.ShowProbes;
+	m_fMaxRayDistance = kVolumeDesc.MaxRayDistance;
+	m_fViewBias = kVolumeDesc.ViewBias;
+	m_fNormalBias = kVolumeDesc.NormalBias;
+	m_iRaysPerProbe = kVolumeDesc.RaysPerProbe;
+	m_fBrightnessThreshold = kVolumeDesc.BrightnessThreshold;
+	m_fDistancePower = kVolumeDesc.DistancePower;
+	m_fHysteresis = kVolumeDesc.Hysteresis;
+	m_iIrradianceFormat = kVolumeDesc.IrradianceFormat;
+	m_fIrradianceGammaEncoding = kVolumeDesc.IrradianceGammaEncoding;
+	m_fIrradianceThreshold = kVolumeDesc.IrradianceThreshold;
+	m_MissRadiance = kVolumeDesc.MissRadiance;
+	m_ProbeOffsets = kVolumeDesc.ProbeOffsets;
+	m_Anchor = kVolumeDesc.Anchor;
+
 	m_bProbeTracking = kVolumeDesc.ProbeTracking;
 
 	m_rng.seed(time(0));
@@ -157,11 +175,6 @@ const DirectX::XMFLOAT3& GIVolume::GetPosition() const
 	return m_Position;
 }
 
-const DirectX::XMFLOAT3& GIVolume::GetProbeTrackingTarget() const
-{
-	return m_ProbeTrackingTarget;
-}
-
 const DirectX::XMFLOAT3& GIVolume::GetProbeSpacing() const
 {
 	return m_ProbeSpacing;
@@ -204,11 +217,6 @@ void GIVolume::SetPosition(const DirectX::XMFLOAT3& kPosition)
 	UpdateProbePositions();
 }
 
-void GIVolume::SetProbeTrackingTarget(const DirectX::XMFLOAT3& kTargetPos)
-{
-	m_ProbeTrackingTarget = kTargetPos;
-}
-
 void GIVolume::SetProbeSpacing(const DirectX::XMFLOAT3& kProbeSpacing)
 {
 	m_ProbeSpacing = kProbeSpacing;
@@ -248,6 +256,33 @@ void GIVolume::SetAnchorPosition(DirectX::XMFLOAT3 position)
 	m_Anchor = position;
 }
 
+void GIVolume::Save(nlohmann::json& data)
+{
+	data["GIVolume"]["Position"].push_back({ m_Position.x, m_Position.y, m_Position.z });
+	data["GIVolume"]["ProbeSpacing"].push_back({ m_ProbeSpacing.x, m_ProbeSpacing.y, m_ProbeSpacing.z });
+	data["GIVolume"]["ProbeScale"].push_back(m_ProbeScale);
+	data["GIVolume"]["ProbeCounts"].push_back({m_ProbeCounts.x, m_ProbeCounts.y, m_ProbeCounts.z });
+	data["GIVolume"]["IrradianceTexelsPerProbe"].push_back(m_iIrradianceTexelsPerProbe);
+	data["GIVolume"]["DistanceTexelsPerProbe"].push_back(m_iDistanceTexelsPerProbe);
+	data["GIVolume"]["AtlasSize"].push_back(m_AtlasSize);
+	data["GIVolume"]["ProbeRelocation"].push_back(m_bProbeRelocation);
+	data["GIVolume"]["ProbeTracking"].push_back(m_bProbeTracking);
+	data["GIVolume"]["ShowProbes"].push_back(m_bShowProbes);
+	data["GIVolume"]["MaxRayDistance"].push_back(m_fMaxRayDistance);
+	data["GIVolume"]["ViewBias"].push_back(m_fViewBias);
+	data["GIVolume"]["NormalBias"].push_back(m_fNormalBias);
+	data["GIVolume"]["RaysPerProbe"].push_back(m_iRaysPerProbe);
+	data["GIVolume"]["BrightnessThreshold"].push_back(m_fBrightnessThreshold);
+	data["GIVolume"]["DistancePower"].push_back(m_fDistancePower);
+	data["GIVolume"]["Hysteresis"].push_back(m_fHysteresis);
+	data["GIVolume"]["IrradianceFormat"].push_back(m_iIrradianceFormat);
+	data["GIVolume"]["IrradianceGammaEncoding"].push_back(m_fIrradianceGammaEncoding);
+	data["GIVolume"]["IrradianceThreshold"].push_back(m_fIrradianceThreshold);
+	data["GIVolume"]["MissRadiance"].push_back({ m_MissRadiance.x, m_MissRadiance.y, m_MissRadiance.z });
+	data["GIVolume"]["ProbeOffsets"].push_back({ m_ProbeOffsets.x, m_ProbeOffsets.y, m_ProbeOffsets.z });
+	data["GIVolume"]["AnchorPosition"].push_back({ m_Anchor.x, m_Anchor.y, m_Anchor.z });
+}
+
 void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 {
 	App::GetApp()->ResetCommandList();
@@ -276,7 +311,7 @@ void GIVolume::CreateProbeGameObjects(ID3D12GraphicsCommandList4* pCommandList)
 				offset = XMFLOAT3((i * m_ProbeSpacing.x) - totalDimensions.x * 0.5f, (j * m_ProbeSpacing.y) - totalDimensions.y * 0.5f, (k * m_ProbeSpacing.z) - totalDimensions.z * 0.5f);
 
 				pGameObject = new GameObject();
-				pGameObject->Init("Probe" + std::to_string(iIndex), XMFLOAT3(m_Position.x + offset.x, m_Position.y + offset.y, m_Position.z + offset.z), XMFLOAT3(), XMFLOAT3(m_ProbeScale, m_ProbeScale, m_ProbeScale), pMesh, m_bShowProbes, false);
+				pGameObject->Init("Probe" + std::to_string(iIndex), XMFLOAT3(m_Position.x + offset.x, m_Position.y + offset.y, m_Position.z + offset.z), XMFLOAT3(), XMFLOAT3(m_ProbeScale, m_ProbeScale, m_ProbeScale), pMesh, m_bShowProbes, false, false);
 
 				m_ProbeGameObjects.push_back(pGameObject);
 			}

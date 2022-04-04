@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Include/DirectX/d3dx12.h"
+#include "Include/json/json.hpp"
 #include "Commons/UploadBuffer.h"
 #include "Shaders/ConstantBuffers.h"
 #include "Commons/AccelerationBuffers.h"
@@ -20,13 +21,32 @@ class DescriptorHeap;
 struct GIVolumeDesc
 {
 	DirectX::XMFLOAT3 Position;
-	
-	DirectX::XMINT3 ProbeCounts;
 	DirectX::XMFLOAT3 ProbeSpacing;
-	float ProbeScale;
+	DirectX::XMFLOAT3 MissRadiance;
+	DirectX::XMFLOAT3 Anchor;
+
+	DirectX::XMINT3 ProbeCounts;
+	DirectX::XMINT3 ProbeOffsets;
+
+	int IrradianceTexelsPerProbe;
+	int DistanceTexelsPerProbe;
+	int GIAtlasSize;
+	int IrradianceFormat;
+	int RaysPerProbe;
 
 	bool ProbeRelocation;
 	bool ProbeTracking;
+	bool ShowProbes;
+
+	float ProbeScale;
+	float MaxRayDistance;
+	float ViewBias;
+	float NormalBias;
+	float BrightnessThreshold;
+	float DistancePower;
+	float Hysteresis;
+	float IrradianceGammaEncoding;
+	float IrradianceThreshold;
 };
 
 namespace RaytracingPass
@@ -119,6 +139,8 @@ public:
 
 	void SetAnchorPosition(DirectX::XMFLOAT3 position);
 
+	void Save(nlohmann::json& data);
+
 protected:
 
 private:
@@ -185,7 +207,6 @@ private:
 	Texture* m_pProbeDataAtlas = nullptr;
 
 	DirectX::XMFLOAT3 m_Position = DirectX::XMFLOAT3();
-	DirectX::XMFLOAT3 m_ProbeTrackingTarget = DirectX::XMFLOAT3();
 	DirectX::XMFLOAT3 m_ProbeSpacing = DirectX::XMFLOAT3(0.3f, 0.3f, 0.3f);
 	float m_ProbeScale = 0.05f;
 	DirectX::XMINT3 m_ProbeCounts = DirectX::XMINT3(9, 9, 9);

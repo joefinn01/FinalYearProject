@@ -169,6 +169,8 @@ public:
 	UINT GetNumIndices() const;
 	UINT GetNumPrimitives() const;
 
+	std::string GetName() const;
+
 protected:
 
 private:
@@ -182,6 +184,9 @@ private:
 	UINT m_uiNumVertices;
 	UINT m_uiNumIndices;
 	UINT m_uiNumPrimitives;
+
+	std::string m_sFilePath;
+	std::string m_sName;
 
 	friend class MeshManager;
 };

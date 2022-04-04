@@ -15,7 +15,7 @@ GameObject::~GameObject()
 {
 }
 
-bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bContributeGI)
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT3 rotation, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bContributeGI, bool bSave)
 {
 	m_sName = sName;
 
@@ -35,6 +35,33 @@ bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XM
 
 	m_bRender = bRender;
 	m_bContrinuteGI = bContributeGI;
+	m_bSave = bSave;
+
+	return true;
+}
+
+bool GameObject::Init(std::string sName, DirectX::XMFLOAT3 position, DirectX::XMFLOAT4 rotationQuat, DirectX::XMFLOAT3 scale, Mesh* pMesh, bool bRender, bool bContributeGI, bool bSave)
+{
+	m_sName = sName;
+
+	m_Position = position;
+
+	m_Rotation = rotationQuat;
+	UpdateAxisVectors();
+
+	m_Scale = scale;
+
+	m_eType = GameObjectType::BASE;
+
+	m_pMesh = pMesh;
+
+	ObjectManager::GetInstance()->AddGameObject(this, m_uiIndex);
+	MeshManager::GetInstance()->AddNumActivePrimitives(m_pMesh->GetNumPrimitives());
+	MeshManager::GetInstance()->AddNumActiveRaytracedPrimitives(m_pMesh->GetNumPrimitives());
+
+	m_bRender = bRender;
+	m_bContrinuteGI = bContributeGI;
+	m_bSave = bSave;
 
 	return true;
 }
@@ -265,6 +292,11 @@ bool GameObject::IsContributeGI()
 	return m_bContrinuteGI;
 }
 
+bool GameObject::IsSaved()
+{
+	return m_bSave;
+}
+
 void GameObject::SetIsRendering(bool bRender)
 {
 	m_bRender = bRender;
@@ -273,6 +305,22 @@ void GameObject::SetIsRendering(bool bRender)
 void GameObject::SetIsContributeGI(bool bContribute)
 {
 	m_bContrinuteGI = bContribute;
+}
+
+void GameObject::SetIsSaved(bool bSave)
+{
+	m_bSave = bSave;
+}
+
+void GameObject::Save(nlohmann::json& data)
+{
+	data["GameObjects"]["Name"].push_back(m_sName);
+	data["GameObjects"]["Position"].push_back({ m_Position.x, m_Position.y, m_Position.z });
+	data["GameObjects"]["Rotation"].push_back({ m_Rotation.x, m_Rotation.y, m_Rotation.z, m_Rotation.w });
+	data["GameObjects"]["Scale"].push_back({ m_Scale.x, m_Scale.y, m_Scale.z });
+	data["GameObjects"]["Mesh"].push_back(m_pMesh->GetName());
+	data["GameObjects"]["Render"].push_back(m_bRender);
+	data["GameObjects"]["ContributeGI"].push_back(m_bContrinuteGI);
 }
 
 void GameObject::UpdateAxisVectors()

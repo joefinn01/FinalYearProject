@@ -2,6 +2,7 @@
 #include "Commons/Singleton.h"
 #include "Commons/UploadBuffer.h"
 #include "Include/DirectX/d3dx12.h"
+#include "Include/json/json.hpp"
 #include "Commons/Mesh.h"
 
 #include <string>
@@ -53,6 +54,9 @@ public:
 
 	void AddNumActivePrimitives(UINT uiNumActivePrimitives);
 	void AddNumActiveRaytracedPrimitives(UINT uiNumActiveRaytracedPrimitives);
+
+	void Save(nlohmann::json& data);
+	void LoadScene(const std::string& ksFilepath, ID3D12GraphicsCommandList* pGraphicsCommandList);
 
 private:
 	bool ProcessNode(MeshNode* pParentNode,const tinygltf::Node& kNode, UINT16 uiNodeIndex, const tinygltf::Model& kModel, Mesh* pMesh, std::vector<Vertex>* pVertexBuffer, std::vector<UINT>* pIndexBuffer);

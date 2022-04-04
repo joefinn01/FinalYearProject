@@ -8,6 +8,7 @@
 
 #include "Helpers/ImGuiHelper.h"
 #include "Include/ImGui/imgui.h"
+#include "Include/json/json.hpp"
 
 using namespace DirectX;
 #endif
@@ -98,6 +99,18 @@ struct LightCB
 			ImGui::TreePop();
 		}
 
+	}
+
+	void Save(nlohmann::json& data)
+	{
+		data["Lights"]["Position"].push_back({ Position.x, Position.y, Position.z });
+		data["Lights"]["Type"].push_back((int)Type);
+		data["Lights"]["Direction"].push_back({ Direction.x, Direction.y, Direction.z });
+		data["Lights"]["Range"].push_back(Range);
+		data["Lights"]["Color"].push_back({ Color.x, Color.y, Color.z });
+		data["Lights"]["Power"].push_back(Power);
+		data["Lights"]["Attenuation"].push_back({ Attenuation.x, Attenuation.y, Attenuation.z });
+		data["Lights"]["Enabled"].push_back(Enabled);
 	}
 
 #endif
