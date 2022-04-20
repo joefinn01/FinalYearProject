@@ -39,6 +39,17 @@ float3 FresnelSchlick(float fHalfDotView, float3 reflectance0)
     return reflectance0 + (1.0f - reflectance0) * pow(clamp(1.0f - fHalfDotView, 0.0f, 1.0f), 5.0f);
 }
 
+float3 FresnelSchlickA(float3 reflectance0)
+{
+    return (823543.0f * (reflectance0 - FresnelSchlick(1.0f / 7.0f, reflectance0))) / 46656.0f + (49.0f * (1.0f - reflectance0)) / 6.0f;
+}
+
+float3 FresnelLazanyi(float fHalfDotView, float3 reflectance0)
+{
+    return FresnelSchlick(fHalfDotView, reflectance0) - FresnelSchlickA(reflectance0) * fHalfDotView * pow(1.0f - fHalfDotView, 6);
+
+}
+
 float CheckLightVisibility(Payload payload, float maxDistance, float3 lightVec)
 {
     RayDesc ray;
@@ -83,7 +94,7 @@ float3 CalculatePointLight(Payload payload, LightCB lightCB)
     float3 radiance = lightCB.Color * fAttenuation;
 
     float3 refelctance0 = float3(0.04f, 0.04f, 0.04f);
-    float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
+    float3 fresnel = FresnelLazanyi(max(dot(halfVec, viewW), 0.0f), refelctance0);
     float fNDF = NormalDistribution(payload.ShadingNormalW, halfVec, payload.Roughness);
     float fGeomDist = GeometryDistribution(payload.ShadingNormalW, viewW, light, payload.Roughness);
 
@@ -110,7 +121,7 @@ float3 CalculateDirectionalLight(Payload payload, LightCB lightCB)
     float3 halfVec = normalize(viewW - lightCB.Direction);
 
     float3 refelctance0 = float3(0.04f, 0.04f, 0.04f);
-    float3 fresnel = FresnelSchlick(max(dot(halfVec, viewW), 0.0f), refelctance0);
+    float3 fresnel = FresnelLazanyi(max(dot(halfVec, viewW), 0.0f), refelctance0);
     float fNDF = NormalDistribution(payload.ShadingNormalW, halfVec, payload.Roughness);
     float fGeomDist = GeometryDistribution(payload.ShadingNormalW, viewW, -lightCB.Direction, payload.Roughness);
 
