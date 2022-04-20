@@ -1,6 +1,7 @@
 #include "DebugHelper.h"
 #include "Commons/ScopedTimer.h"
 #include "Include/ImGui/imgui.h"
+#include "Include/json/json.hpp"
 #include "Helpers/ImGuiHelper.h"
 
 #include <stdio.h>
@@ -8,12 +9,13 @@
 #include <cstdarg>
 #include <Windows.h>
 #include <sstream>
+#include <fstream>
 
 std::unordered_map<std::string, double> DebugHelper::s_TimerTimes = std::unordered_map<std::string, double>();
 Microsoft::WRL::ComPtr<ID3D12QueryHeap> DebugHelper::s_pQueryHeap = nullptr;
 Microsoft::WRL::ComPtr<ID3D12Resource> DebugHelper::s_pTimestampResource = nullptr;
 UINT64 DebugHelper::s_uiTimestampFrequency = 0;
-std::vector<double> DebugHelper::s_GpuStatTimes = std::vector<double>();
+std::vector<std::deque<double>> DebugHelper::s_GpuStatTimes = std::vector<std::deque<double>>();
 
 std::vector<std::string> DebugHelper::s_sGpuStatNames =
 {
@@ -64,8 +66,6 @@ void DebugHelper::Log(LogLevel logLevel, std::wstring sTag, std::wstring sText, 
 	}
 
 	ss << sText << std::endl;
-
-	
 
 	//pass in varidic arguments and output to the console.
 	va_list args;
@@ -118,7 +118,7 @@ void DebugHelper::ShowUI()
 		{
 			for (int i = 0; i < (int)GpuStats::COUNT; ++i)
 			{
-				ImGuiHelper::Text(s_sGpuStatNames[i], "%f", 150.0f, s_GpuStatTimes[i]);
+				ImGuiHelper::Text(s_sGpuStatNames[i], "%f", 150.0f, GetGpuTime(s_GpuStatTimes[i]));
 
 				ImGui::Spacing();
 			}
@@ -224,11 +224,62 @@ void DebugHelper::UpdateTimestamps()
 			continue;
 		}
 
-		s_GpuStatTimes[(int)(i * 0.5f)] = (1000.0 * (double)(gpuQueries[i + 1] - gpuQueries[i])) / (double)s_uiTimestampFrequency;
+		if (s_GpuStatTimes[(int)(i * 0.5f)].size() == 10)
+		{
+			s_GpuStatTimes[(int)(i * 0.5f)].pop_front();
+		}
+
+		s_GpuStatTimes[(int)(i * 0.5f)].push_back((1000.0 * (double)(gpuQueries[i + 1] - gpuQueries[i])) / (double)s_uiTimestampFrequency);
 	}
 }
 
 ID3D12QueryHeap* DebugHelper::GetQueryHeap()
 {
 	return s_pQueryHeap.Get();
+}
+
+void DebugHelper::WriteTimes(const std::string& ksRunNumber)
+{
+	std::string sFilepath = "Times/GpuTimes-";
+	sFilepath += ksRunNumber + ".json";
+
+	//Load in JSON data
+	std::ifstream inFile(sFilepath);
+
+	nlohmann::json data;
+
+	if (inFile.is_open() == true)
+	{
+		inFile >> data;
+
+		inFile.close();
+	}
+
+	for (int i = 0; i < s_GpuStatTimes.size(); ++i)
+	{
+		data[s_sGpuStatNames[i]].push_back(GetGpuTime(s_GpuStatTimes[i]));
+	}
+
+	std::ofstream file(sFilepath);
+
+	if (file.is_open() == false)
+	{
+		return;
+	}
+
+	file << data;
+
+	file.close();
+}
+
+double DebugHelper::GetGpuTime(const std::deque<double>& kQueue)
+{
+	double time = 0;
+
+	for (std::deque<double>::const_iterator it = kQueue.cbegin(); it != kQueue.cend(); ++it)
+	{
+		time += *it;
+	}
+
+	return time / (double)kQueue.size();
 }

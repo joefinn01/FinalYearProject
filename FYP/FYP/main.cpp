@@ -12,6 +12,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 	//Get file path to json file from command line
 	std::string filepath = "";
+	std::string runNumber = "";
 
 	int iNumArgs = -1;
 	LPWSTR* arguments = CommandLineToArgvW(GetCommandLine(), &iNumArgs);
@@ -23,7 +24,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 		filepath = std::string(tempFilepath.begin(), tempFilepath.end());
 	}
 
-	if (App::GetApp()->Init(filepath) == false)
+	if (iNumArgs > 2)
+	{
+		std::wstring tempRunNumber = arguments[2];
+
+		runNumber = std::string(tempRunNumber.begin(), tempRunNumber.end());
+	}
+
+	if (App::GetApp()->Init(filepath, runNumber) == false)
 	{
 		LOG_ERROR(tag, L"Failed to Init App!");
 

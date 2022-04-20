@@ -68,8 +68,10 @@ App::~App()
 {
 }
 
-bool App::Init(const std::string& ksFilepath)
+bool App::Init(const std::string& ksFilepath, std::string& ksRunNumber)
 {
+	m_sRunName = ksRunNumber;
+
 	UINT uiDXGIFactoryFlags = 0;
 	HRESULT hr;
 
@@ -268,6 +270,21 @@ std::wstring App::GetPixGpuCapturePath()
 
 void App::Update(const Timer& kTimer)
 {
+#if PROFILE_RUN
+	if (m_ProfileTimer.GameTime() >= m_fProfileIntervals)
+	{
+		WRITE_PROFILE_TIMES(m_sRunName);
+
+		m_ProfileTimer.Reset();
+		m_ProfileTimer.Start();
+
+		if (kTimer.GameTime() >= m_fProfileTime)
+		{
+			PostQuitMessage(0);
+		}
+	}
+#endif
+
 	DebugHelper::ResetFrameTimes();
 
 	InputManager::GetInstance()->Update(kTimer);
@@ -646,6 +663,7 @@ int App::Run()
 	MSG msg = { 0 };
 
 	m_Timer.Reset();
+	m_ProfileTimer.Reset();
 
 	while (msg.message != WM_QUIT)
 	{
@@ -657,6 +675,7 @@ int App::Run()
 		else
 		{
 			m_Timer.Tick();
+			m_ProfileTimer.Tick();
 
 			if (!m_bPaused)
 			{
@@ -1545,7 +1564,7 @@ void App::InitScene(const std::string& ksFilepath)
 
 		if (inFile.is_open() == false)
 		{
-			LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+			LOG_ERROR(tag, L"Failed to open scene json file when loading game object data!");
 
 			return;
 		}
@@ -1639,7 +1658,7 @@ void App::InitConstantBuffers(const std::string& ksFilepath)
 
 		if (inFile.is_open() == false)
 		{
-			LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+			LOG_ERROR(tag, L"Failed to open scene json file when loading constant buffer data!");
 
 			return;
 		}

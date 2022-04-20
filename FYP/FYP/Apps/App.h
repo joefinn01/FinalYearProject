@@ -17,7 +17,6 @@
 
 #define MAX_LIGHTS 5
 
-class Timer;
 class DescriptorHeap;
 class Descriptor;
 class Texture;
@@ -146,7 +145,7 @@ public:
 	App(HINSTANCE hInstance);
 	~App();
 
-	virtual bool Init(const std::string& ksFilepath);
+	virtual bool Init(const std::string& ksFilepath, std::string& ksRunNumber);
 
 #if PIX
 	static std::wstring GetPixGpuCapturePath();
@@ -286,6 +285,11 @@ protected:
 	static App* m_pApp;
 
 	Timer m_Timer;
+	Timer m_ProfileTimer;
+
+	float m_fProfileTime = 300.0f;
+	float m_fProfileIntervals = 5.0f;
+	std::string m_sRunName = "";
 
 	bool m_bPaused = false;
 	bool m_bMinimized = false;

@@ -413,7 +413,7 @@ void MeshManager::LoadScene(const std::string& ksFilepath, ID3D12GraphicsCommand
 
 	if (inFile.is_open() == false)
 	{
-		LOG_ERROR(tag, L"Failed to open scene json file when loading!");
+		LOG_ERROR(tag, L"Failed to open scene json file when loading mesh data!");
 
 		return;
 	}
