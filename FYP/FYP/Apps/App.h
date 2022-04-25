@@ -291,6 +291,8 @@ protected:
 	float m_fProfileIntervals = 5.0f;
 	std::string m_sRunName = "";
 
+	bool m_bShowUI = true;
+
 	bool m_bPaused = false;
 	bool m_bMinimized = false;
 	bool m_bMaximized = false;

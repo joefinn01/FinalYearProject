@@ -474,7 +474,10 @@ void App::Draw()
 		GPU_PROFILE_END(GpuStats::FULL_FRAME, m_pGraphicsCommandList)
 	}
 
-	DrawImGui();
+	if (m_bShowUI == true)
+	{
+		DrawImGui();
+	}
 
 #if PROFILE_TIMERS
 	DebugHelper::EndFrame(m_pGraphicsCommandList.Get());
@@ -868,6 +871,10 @@ LRESULT App::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (wParam == VK_ESCAPE)
 		{
 			PostQuitMessage(0);
+		}
+		else if (wParam == VK_F1)
+		{
+			m_bShowUI = !m_bShowUI;
 		}
 		else if ((int)wParam == VK_F2)
 		{
