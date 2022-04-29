@@ -34,7 +34,7 @@ enum class GpuStats
 #define PROFILE_TIMERS 1
 
 #if PROFILE_TIMERS
-#define PROFILE_RUN 1
+#define PROFILE_RUN 0
 #endif
 
 #if _DEBUG || PROFILE_TIMERS
